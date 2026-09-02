@@ -1,7 +1,5 @@
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../db";
 import { MVP_FORMATION } from "../lib/constants/formation";
-
-const prisma = new PrismaClient();
 
 /**
  * Select the best starting XI for a club based on MVP_FORMATION slots.

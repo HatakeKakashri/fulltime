@@ -1,5 +1,7 @@
 import { prisma } from "./db";
 import { generateSquads } from "./lib/generate-squads";
+import { generateFixtures } from "./services/season-scheduling";
+import { recomputeAllStartingXIs } from "./services/starting-xi";
 
 const SEED = Number(process.env.SEED) || 42;
 
@@ -57,11 +59,20 @@ async function main() {
     });
   }
 
+  // Generate fixtures (380 fixtures across 38 matchdays)
+  await generateFixtures(season.id);
+
+  // Ensure all clubs have starting XIs
+  await recomputeAllStartingXIs();
+
   // Verify
   const clubCount = await prisma.club.count();
   const playerCount = await prisma.player.count();
   const tokenCount = await prisma.tokenBalance.count();
+  const matchdayCount = await prisma.matchday.count({ where: { seasonId: season.id } });
+  const fixtureCount = await prisma.fixture.count({ where: { matchday: { seasonId: season.id } } });
   console.log(`Verification: ${clubCount} clubs, ${playerCount} players, ${tokenCount} token balances`);
+  console.log(`Season: ${matchdayCount} matchdays, ${fixtureCount} fixtures`);
   console.log("Seed complete!");
 }
 

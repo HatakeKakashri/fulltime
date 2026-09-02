@@ -234,12 +234,6 @@ export async function simulateMatch(fixtureId: string): Promise<Match> {
     },
   });
 
-  // 7. Update fixture status
-  await prisma.fixture.update({
-    where: { id: fixtureId },
-    data: { status: 'completed' },
-  });
-
   return match;
 }
 
