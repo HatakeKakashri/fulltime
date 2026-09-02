@@ -58,8 +58,17 @@ model Club {
   season        Season          @relation(fields: [seasonId], references: [id])
   players       Player[]
   tokenBalance  TokenBalance?
+  startingXI    StartingXI?
   homeFixtures  Fixture[]       @relation("HomeFixtures")
   awayFixtures  Fixture[]       @relation("AwayFixtures")
+}
+
+model StartingXI {
+  id          String   @id @default(uuid())
+  clubId      String   @unique
+  playerIds   Json     // Array of player UUIDs (11 players)
+  computedAt  DateTime @default(now())
+  club        Club     @relation(fields: [clubId], references: [id])
 }
 
 model Player {

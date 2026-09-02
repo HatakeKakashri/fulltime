@@ -34,19 +34,22 @@ describe("generateSquads", () => {
   });
 
   it("should apply club modifiers: attributes should vary between clubs", () => {
-    const firstClub = league.clubs[0]!;
-    const lastClub = league.clubs[19]!;
+    const firstClub = league.clubs[0];
+    const lastClub = league.clubs[19];
+    if (!firstClub || !lastClub) throw new Error("Clubs not found");
     // Compare first players' attack values across different clubs
     const firstClubAttacks = firstClub.players.map((p) => p.attack);
     const lastClubAttacks = lastClub.players.map((p) => p.attack);
     // At least some attributes should differ between clubs due to different modifiers
-    const hasDifference = firstClubAttacks.some((a, i) => a !== lastClubAttacks[i]!);
+    const hasDifference = firstClubAttacks.some((a, i) => a !== lastClubAttacks[i]);
     expect(hasDifference).toBe(true);
   });
 
   it("should have club IDs from 'club-1' through 'club-20'", () => {
     for (let i = 0; i < 20; i++) {
-      expect(league.clubs[i]!.id).toBe(`club-${i + 1}`);
+      const club = league.clubs[i];
+      if (!club) throw new Error(`Club ${i} not found`);
+      expect(club.id).toBe(`club-${i + 1}`);
     }
   });
 });
