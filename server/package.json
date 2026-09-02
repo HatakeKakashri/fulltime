@@ -4,8 +4,15 @@
   "private": true,
   "module": "src/index.ts",
   "type": "module",
+  "scripts": {
+    "seed": "bun run src/seed.ts"
+  },
   "devDependencies": {
     "@types/bun": "latest"
+  },
+  "dependencies": {
+    "prisma": "^6.0.0",
+    "@prisma/client": "^6.0.0"
   },
   "peerDependencies": {
     "typescript": "^5"

@@ -1,0 +1,96 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Season {
+  id          String      @id @default(uuid())
+  startDate   DateTime
+  status      String      @default("INITIALIZED") // INITIALIZED, IN_PROGRESS, COMPLETED
+  createdAt   DateTime    @default(now())
+  matchdays   Matchday[]
+  transfers   TransferWindow[]
+  clubs       Club[]
+}
+
+model Matchday {
+  id        String    @id @default(uuid())
+  seasonId  String
+  index     Int       // 1-38
+  status    String    @default("PENDING") // PENDING, SIMULATED
+  season    Season    @relation(fields: [seasonId], references: [id])
+  fixtures  Fixture[]
+}
+
+model Fixture {
+  id          String    @id @default(uuid())
+  matchdayId  String
+  homeClubId  String
+  awayClubId  String
+  status      String    @default("PENDING") // PENDING, SIMULATED
+  seed        Int?      // PRNG seed for deterministic simulation
+  matchId     String?   // populated after simulation
+  matchday    Matchday  @relation(fields: [matchdayId], references: [id])
+  homeClub    Club      @relation("HomeFixtures", fields: [homeClubId], references: [id])
+  awayClub    Club      @relation("AwayFixtures", fields: [awayClubId], references: [id])
+  match       Match?
+}
+
+model Match {
+  id            String    @id @default(uuid())
+  fixtureId     String    @unique
+  homeScore     Int
+  awayScore     Int
+  eventLogJson  String    // JSON string of MatchEvent[]
+  status        String    @default("COMPLETED")
+  simulatedAt   DateTime  @default(now())
+  fixture       Fixture   @relation(fields: [fixtureId], references: [id])
+}
+
+model Club {
+  id            String          @id @default(uuid())
+  name          String
+  seasonId      String
+  season        Season          @relation(fields: [seasonId], references: [id])
+  players       Player[]
+  tokenBalance  TokenBalance?
+  homeFixtures  Fixture[]       @relation("HomeFixtures")
+  awayFixtures  Fixture[]       @relation("AwayFixtures")
+}
+
+model Player {
+  id                      String  @id @default(uuid())
+  clubId                  String
+  name                    String
+  positionGroup           String  // GK, DEF, MID, FWD
+  attack                  Int
+  defense                 Int
+  passing                 Int
+  physical                Int
+  goalkeeping             Int
+  overallRating           Float
+  contractSeasonsRemaining Int
+  baseValuation           Int
+  listedForSale           Boolean @default(false)
+  club                    Club    @relation(fields: [clubId], references: [id])
+}
+
+model TokenBalance {
+  id        String  @id @default(uuid())
+  clubId    String  @unique
+  balance   Int     @default(1000000)
+  club      Club    @relation(fields: [clubId], references: [id])
+}
+
+model TransferWindow {
+  id        String    @id @default(uuid())
+  seasonId  String
+  type      String    // START, MIDPOINT
+  opensAt   DateTime
+  closesAt  DateTime?
+  season    Season    @relation(fields: [seasonId], references: [id])
+}
