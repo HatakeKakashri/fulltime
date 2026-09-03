@@ -13,7 +13,7 @@
 - [x] 2. Implement `simulateNextMatchday(seasonId)` function
   - Find next pending matchday (lowest index where status = PENDING)
   - Load all pending fixtures for that matchday
-  - Ensure both clubs have starting XIs (call `recalculateStartingXI` if missing)
+  - Ensure both clubs have starting XIs via a defensive `ensureStartingXI` helper that calls `recalculateStartingXI` only when the club has no XI row yet (under MVP scope this branch cannot fire after `seed.ts` has run — `recomputeAllStartingXIs()` is invoked once at season start and no path mutates squads mid-season; the ensure call is an idempotency safety net, not a transfer-window trigger)
   - Loop through fixtures sequentially, calling `simulateMatch(fixtureId)` for each
   - Update matchday status to SIMULATED after all fixtures complete
   - Return simulated matchday with results
