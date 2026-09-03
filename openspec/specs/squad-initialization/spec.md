@@ -1,7 +1,7 @@
 # squad-initialization
 
 ## Purpose
-Defines how the 20 clubs' initial rosters and player attributes are generated at season start, providing the data foundation `match-simulation`, `transfer-market`, and `starting-xi-selection` depend on.
+Defines how the 20 clubs' initial rosters and player attributes are generated at season start, providing the data foundation `match-simulation` and `starting-xi-selection` depend on.
 
 ## Requirements
 
@@ -34,10 +34,4 @@ The system SHALL generate attribute values from a bounded random range, not the 
 - WHEN each club's squad is rolled
 - THEN a small per-club modifier (−3 to +3) is applied uniformly across that club's roster, so clubs differ mildly but no club starts significantly stronger or weaker than the rest
 
-### Requirement: Initial Contract and Valuation
-The system SHALL assign each generated player a contract length and a base market valuation derived from their Overall Rating, since both are required inputs for `transfer-market`.
 
-#### Scenario: New player contract and valuation
-- GIVEN a player is generated at season start
-- WHEN their contract and valuation are set
-- THEN they receive a randomized remaining contract length (1–3 seasons) and a base valuation computed from their Overall Rating via a configurable scaling factor
