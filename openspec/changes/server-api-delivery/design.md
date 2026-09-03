@@ -4,7 +4,9 @@
 
 The simulation pipeline produces a complete, queryable dataset: 20 clubs, 400 players, 380 fixtures across 38 matchdays, with deterministic completed `Match` rows. However, `server/src/index.ts` is currently a bare `Bun.serve({ fetch: () => "Bun!" })` stub that does not actually expose any data. There is no transport layer between the seeded Postgres database and the (blocked) React/Vite client.
 
-This change introduces the project's declared stack — Fastify + tRPC — and builds the first end-to-end MVP loop: seed → simulate → read from a browser. See `proposal.md` for motivation and the capability-level "why"; this design covers the "how".
+This change introduces the project's declared stack — tRPC over a Bun-native HTTP server — and builds the first end-to-end MVP loop: seed → simulate → read from a browser. See `proposal.md` for motivation and the capability-level "why"; this design covers the "how".
+
+> **Stack pivot note (post-design).** An earlier revision of this document named Fastify as the HTTP layer. Fastify was dropped before implementation because `@trpc/server/adapters/fastify` is an ESM plugin incompatible with Bun's runtime (Bun's bundler does not support the plugin's `fastify-plugin` ESM/CJS interop shape). The tRPC half of the stack is unchanged; the HTTP transport is now `Bun.serve({ routes })` calling `fetchRequestHandler` from `@trpc/server/adapters/fetch` directly. Reference implementation: [`merthanmerter/burt`](https://github.com/merthanmerter/burt).
 
 Two pre-existing bugs in the codebase constrain the design:
 
@@ -14,7 +16,7 @@ Two pre-existing bugs in the codebase constrain the design:
 ## Goals / Non-Goals
 
 **Goals:**
-- Replace the `Bun.serve` stub with a Fastify HTTP server that mounts the project's tRPC router.
+- Replace the `Bun.serve` stub with a `Bun.serve({ routes })` server that mounts the project's tRPC router via `@trpc/server`'s official fetch adapter.
 - Expose four read-only tRPC procedures covering the MVP observation surface: `league.standings`, `league.fixtures`, `match.result`, `club.squad` (with StartingXI).
 - Implement `league.standings` as a pure derivation over `Match` rows (no persisted standings model).
 - Lock the standings ordering with deterministic unit tests on a known fixture set before the client depends on it.
@@ -33,18 +35,46 @@ Two pre-existing bugs in the codebase constrain the design:
 
 ## Decisions
 
-### Decision: Fastify + tRPC over Bun+standalone tRPC fetch handler
+### Decision: Bun.serve + `@trpc/server` fetch adapter over Fastify + tRPC
 
-`project.md` declares the backend stack as "Fastify" with the "Client-server contract: tRPC". Bun's runtime is already in use (the current stub uses `Bun.serve`), so a Bun-native tRPC fetch handler is technically possible. We choose Fastify because:
+`project.md` previously declared the HTTP layer as Fastify. Implementation surfaced an incompatibility: `@trpc/server/adapters/fastify` is an ESM plugin whose `fastify-plugin` interop is not supported by Bun's runtime/bundler (Bun rejects the plugin's ESM/CJS bridge at startup). We therefore pivot the HTTP layer to `Bun.serve({ routes })` + `@trpc/server/adapters/fetch` (the "burt" pattern, after [`merthanmerter/burt`](https://github.com/merthanmerter/burt)), and drop the Fastify dependency entirely. Rationale:
 
-- **Stack conformance.** `project.md` explicitly names Fastify. Deviating requires amending the project-level stack declaration, which has wider blast radius than this change.
-- **Ecosystem maturity.** `@fastify/cors` is a first-party plugin with documented preflight + allowed-origins handling. The current stub's hand-rolled CORS logic (a `204` on `OPTIONS` plus per-response headers) does not handle multi-origin, header echoing, or preflight caching.
-- **Plugin ergonomics.** Logging (`pino`), request validation, and future auth middleware can be added as plugins without rewriting the bootstrap. A raw `Bun.serve` fetch handler requires hand-rolling equivalents.
-- **tRPC adapter is well-supported.** `@trpc/server/adapters/fastify` provides a thin wrapper over `fastify.trpc` that requires no glue code beyond registering the adapter plugin.
+- **Runtime fit.** `Bun.serve` is the project's native HTTP server (the original stub used it). `fetchRequestHandler` from `@trpc/server/adapters/fetch` is officially maintained on tRPC v11, accepts a standard `Request`, and returns a standard `Response` — the exact shape `Bun.serve` expects.
+- **Zero extra transport deps.** No `fastify`, no `@fastify/cors`, no `fastify-plugin`. The fetch adapter is bundled with `@trpc/server`, which we were already adding.
+- **CORS handled inline.** A single `CORS_HEADERS` constant + `OPTIONS` short-circuit in the fetch handler replaces `@fastify/cors` for the MVP single-origin Vite dev case (`http://localhost:5173`). The original stub's hand-rolled headers are preserved verbatim.
+- **Future middleware.** If the project later needs logging, auth, or rate limiting, they slot into the same `Bun.serve({ routes })` handler (or compose via a tiny wrapper). No rewrite of the bootstrap is required.
 
-**Alternative considered — Bun-native tRPC fetch handler:** would keep the bootstrap smaller and avoid one dependency (`fastify`, `@fastify/cors`). Rejected because it conflicts with `project.md`'s declared stack and forces re-implementation of CORS preflight logic already shipped in `@fastify/cors`.
+**Alternative rejected — Fastify under Bun:** Fastify itself runs fine under Bun in many setups, but `@trpc/server/adapters/fastify` (the integration point) does not load under Bun's bundler. Bridging that gap would require either patching the adapter or maintaining a custom CORS+router wrapper — defeating the value of using Fastify in the first place.
 
-**CORS configuration:** `@fastify/cors` is registered with `origin: "http://localhost:5173"` (Vite dev origin, preserved exactly from the current stub), `methods: ["GET", "POST", "OPTIONS"]` (tRPC uses GET for query batching compatibility, POST for normal queries), and `allowedHeaders: ["Content-Type", "Authorization"]` (matching the current stub). Preflight requests short-circuit in the plugin; no per-route CORS configuration is needed.
+**Bootstrap shape (`server/src/index.ts`):**
+
+```ts
+import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
+import { appRouter } from './trpc/router';
+
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': 'http://localhost:5173',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
+Bun.serve({
+  port: 3001,
+  routes: {
+    '/trpc/*': (req: Request) =>
+      fetchRequestHandler({
+        endpoint: '/trpc',
+        req,
+        router: appRouter,
+        createContext: () => ({}), // Prisma client wired in task 3.1
+        onError({ error, path }) { console.error(`tRPC error on ${path}:`, error); },
+      }),
+    '/': () => new Response('OK'),
+  },
+});
+```
+
+**CORS configuration:** a `CORS_HEADERS` object is merged into every tRPC `Response` and into a `204` `OPTIONS` short-circuit (handled by the fetch handler itself, not a plugin). Origin is `http://localhost:5173` (Vite dev origin, preserved exactly from the current stub), methods are `["GET", "POST", "OPTIONS"]` (tRPC uses GET for query batching, POST for normal queries), and allowed headers are `["Content-Type", "Authorization"]` (matching the current stub).
 
 ### Decision: Router map — four procedures, all `query` (read-only)
 
@@ -137,9 +167,9 @@ A similar normalization is applied to `Fixture.status` (`PENDING` / `SIMULATED`)
 
 [Risk] `match.result` returns zero rows if any old `Match` row has lowercase `status` → Mitigation: Re-run `bun run seed` plus the simulation loop end-to-end after the casing fix; integration test asserts `match.result` returns the expected number of matches for a known completed season.
 
-[Risk] CORS preflight regression when swapping hand-rolled headers for `@fastify/cors` → Mitigation: Smoke check the preflight round-trip against `http://localhost:5173` (Origin / Access-Control-Request-Method / Access-Control-Request-Headers) is part of the integration test bootstrap.
+[Risk] CORS preflight regression when swapping hand-rolled headers for an inline `CORS_HEADERS` constant in the fetch handler → Mitigation: Smoke check the preflight round-trip against `http://localhost:5173` (Origin / Access-Control-Request-Method / Access-Control-Request-Headers) is part of the integration test bootstrap.
 
-[Risk] tRPC over Fastify adds bundle size and runtime overhead → Mitigation: Acceptable in MVP. No high-throughput or latency-sensitive path exists; all procedures are low-cardinality reads over small result sets. Bundle size is irrelevant for a Bun server.
+[Risk] tRPC fetch adapter adds routing overhead vs. a hand-rolled HTTP handler → Mitigation: Acceptable in MVP. No high-throughput or latency-sensitive path exists; all procedures are low-cardinality reads over small result sets. Bundle size is irrelevant for a Bun server.
 
 [Risk] Server-side zod parsing cost on every request → Mitigation: Output zod schemas parse small DTOs (≤ 380 rows of standings, ≤ 38 fixtures per matchday). Cost is bounded; no caching needed in MVP. The future `web-client-delivery` change can add tRPC's HTTP cache headers if profiling shows pressure.
 
@@ -150,8 +180,8 @@ A similar normalization is applied to `Fixture.status` (`PENDING` / `SIMULATED`)
 **Unit tests (no Prisma, pure logic):**
 - `server/src/derivation/standings.test.ts` — exercises `deriveStandings` against a hand-built fixture set with known totals. Covers: empty input, partial season (some `COMPLETED`, some not), full season, three-way tie on points (verifies GD tie-break), three-way tie on points + GD (verifies GF tie-break), three-way total tie (verifies alphabetical fallback), `Match.status` casing isolation (lowercase rows are excluded). The comparator itself gets its own `describe` block with one assertion per tie-breaker level.
 
-**Procedure-level integration tests (Fastify + tRPC + mocked Prisma):**
-- One test file per procedure under `server/src/trpc/procedures/*.test.ts`. Pattern: build a `fastify()` instance in `beforeAll`, register `@fastify/cors` + the tRPC adapter, and invoke each procedure via a tRPC caller (`appRouter.createCaller(ctx)`) for ergonomic assertions. CORS preflight gets a separate `app.inject` test that asserts the response headers (`access-control-allow-origin`, `access-control-allow-methods`).
+**Procedure-level integration tests (`Bun.serve` + tRPC fetch adapter + mocked Prisma):**
+- One test file per procedure under `server/src/trpc/procedures/*.test.ts`. Pattern: boot a test `Bun.serve({ routes })` instance in `beforeAll` (or import the production handler directly into `bun:test`), wire the same `fetchRequestHandler` wrapper with mocked Prisma, and invoke each procedure via a tRPC caller (`appRouter.createCaller(ctx)`) for ergonomic assertions. CORS preflight gets a separate test that sends an `OPTIONS` request and asserts the response headers (`access-control-allow-origin`, `access-control-allow-methods`).
 - All procedure tests use `mock.module("../db", ...)` to stub Prisma per the existing `season-scheduling.test.ts` pattern, so they run without a live database.
 - Zod validation tests assert both: (a) malformed inputs are rejected with `BAD_REQUEST` and a zod issue path, and (b) well-formed inputs return objects matching the output schema byte-for-byte (round-trip through `.parse()` succeeds).
 
