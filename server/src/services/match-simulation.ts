@@ -1,6 +1,7 @@
 import { prisma } from '../db';
 import { getStartingXI } from './starting-xi';
 import { createPRNG } from '../lib/prng';
+import { MATCH_STATUS } from '../lib/constants/match-status';
 import type { Match, Fixture, Player } from '@prisma/client';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -229,7 +230,7 @@ export async function simulateMatch(fixtureId: string): Promise<Match> {
       homeScore,
       awayScore,
       eventLogJson: JSON.stringify(events),
-      status: 'completed',
+      status: MATCH_STATUS.COMPLETED,
       simulatedAt: new Date(),
     },
   });
