@@ -53,8 +53,6 @@ export function generateSquads(seed: number): LeagueData {
         physical: modifiedPhysical,
         goalkeeping: modifiedGoalkeeping,
         overallRating,
-        contract: player.contract,
-        valuation: Math.round(overallRating * 10000),
         positionGroup: pos,
       };
     });

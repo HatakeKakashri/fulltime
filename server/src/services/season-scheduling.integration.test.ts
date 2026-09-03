@@ -72,8 +72,6 @@ async function createClubWithPlayers(
         physical: 50,
         goalkeeping: p.pos === "GK" ? 80 : 30,
         overallRating: p.rating,
-        contractSeasonsRemaining: 3,
-        baseValuation: 1000000,
       },
     });
   }

@@ -6,7 +6,6 @@ React + Vite + Tailwind CSS, consuming the backend exclusively through the tRPC 
 ## Views (MVP)
 - League standings + fixture list (observational; no reward/consequence UI per `season-scheduling`)
 - Match result detail (score, event log, stats) per completed match
-- Central transfer market view (scouted players, current bids) — read-only in MVP since bidding is bot-driven per `bot-transfer-behavior`
 - Club squad view (roster, attributes, starting XI) — useful for validating `squad-initialization` and `starting-xi-selection` output
 
 ## No Auth in MVP

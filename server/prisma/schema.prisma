@@ -13,7 +13,6 @@ model Season {
   status      String      @default("INITIALIZED") // INITIALIZED, IN_PROGRESS, COMPLETED
   createdAt   DateTime    @default(now())
   matchdays   Matchday[]
-  transfers   TransferWindow[]
   clubs       Club[]
 }
 
@@ -57,7 +56,6 @@ model Club {
   seasonId      String
   season        Season          @relation(fields: [seasonId], references: [id])
   players       Player[]
-  tokenBalance  TokenBalance?
   startingXI    StartingXI?
   homeFixtures  Fixture[]       @relation("HomeFixtures")
   awayFixtures  Fixture[]       @relation("AwayFixtures")
@@ -82,24 +80,6 @@ model Player {
   physical                Int
   goalkeeping             Int
   overallRating           Float
-  contractSeasonsRemaining Int
-  baseValuation           Int
-  listedForSale           Boolean @default(false)
   club                    Club    @relation(fields: [clubId], references: [id])
 }
 
-model TokenBalance {
-  id        String  @id @default(uuid())
-  clubId    String  @unique
-  balance   Int     @default(1000000)
-  club      Club    @relation(fields: [clubId], references: [id])
-}
-
-model TransferWindow {
-  id        String    @id @default(uuid())
-  seasonId  String
-  type      String    // START, MIDPOINT
-  opensAt   DateTime
-  closesAt  DateTime?
-  season    Season    @relation(fields: [seasonId], references: [id])
-}

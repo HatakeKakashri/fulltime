@@ -31,7 +31,7 @@ describe("generatePlayer", () => {
 
     for (const pg of positionGroups) {
       it(`${pg}: primary attribute in [55, 80]`, () => {
-        // We need 5 attribute rolls + 1 contract roll = 6 values
+        // We need 5 attribute rolls
         // Use boundary values: 0.0 for min, ~1.0-ε for max
         // For primary (min 55, max 80): roll = floor(v * 26) + 55
         //   v=0.0 → 55, v=0.999 → 80
@@ -48,8 +48,8 @@ describe("generatePlayer", () => {
           "attack" | "defense" | "passing" | "goalkeeping"
         >;
 
-        // All attribute rolls return 0 → min values, then contract roll
-        const next = createMockNext([0, 0, 0, 0, 0, 0]);
+        // All attribute rolls return 0 → min values
+        const next = createMockNext([0, 0, 0, 0, 0]);
         const player = generatePlayer(next, pg);
         expect(player[primaryAttrName]).toBeGreaterThanOrEqual(55);
         expect(player[primaryAttrName]).toBeLessThanOrEqual(80);
@@ -68,7 +68,7 @@ describe("generatePlayer", () => {
         const allAttrs = ["attack", "defense", "passing", "physical", "goalkeeping"];
         const nonPrimaryAttrs = allAttrs.filter((a) => a !== primaryAttr);
 
-        const next = createMockNext([0.999, 0.999, 0.999, 0.999, 0.999, 0]);
+        const next = createMockNext([0.999, 0.999, 0.999, 0.999, 0.999]);
         const player = generatePlayer(next, pg);
 
         for (const attr of nonPrimaryAttrs) {
@@ -82,9 +82,9 @@ describe("generatePlayer", () => {
 
   describe("attribute min/max boundary values", () => {
     it("GK: rolls correct min values when next returns 0", () => {
-      // 5 rolls of 0 → attribute rolls, then 1 for contract
+      // 5 rolls of 0 → attribute rolls
       // GK primary is goalkeeping
-      const next = createMockNext([0, 0, 0, 0, 0, 0]);
+      const next = createMockNext([0, 0, 0, 0, 0]);
       const player = generatePlayer(next, "GK");
 
       // attack, defense, passing, physical are non-primary → [35,60], v=0 → 35
@@ -94,14 +94,12 @@ describe("generatePlayer", () => {
       expect(player.physical).toBe(35);
       // goalkeeping is primary → [55,80], v=0 → 55
       expect(player.goalkeeping).toBe(55);
-      // contract: floor(0 * 3) + 1 = 1
-      expect(player.contract).toBe(1);
     });
 
     it("GK: rolls correct max values when next returns ~1", () => {
       // rollToV(25) gives a value where floor(v * 26) = 25, so 25 + 35 = 60 and 25 + 55 = 80
       const v = rollToV(25);
-      const next = createMockNext([v, v, v, v, v, 0.99]);
+      const next = createMockNext([v, v, v, v, v]);
       const player = generatePlayer(next, "GK");
 
       expect(player.attack).toBe(60);
@@ -109,12 +107,10 @@ describe("generatePlayer", () => {
       expect(player.passing).toBe(60);
       expect(player.physical).toBe(60);
       expect(player.goalkeeping).toBe(80);
-      // contract: floor(0.99 * 3) + 1 = floor(2.97) + 1 = 2 + 1 = 3
-      expect(player.contract).toBe(3);
     });
 
     it("FWD: rolls correct min values when next returns 0", () => {
-      const next = createMockNext([0, 0, 0, 0, 0, 0]);
+      const next = createMockNext([0, 0, 0, 0, 0]);
       const player = generatePlayer(next, "FWD");
 
       // attack is primary → 55
@@ -128,7 +124,7 @@ describe("generatePlayer", () => {
 
     it("FWD: rolls correct max values", () => {
       const v = rollToV(25);
-      const next = createMockNext([v, v, v, v, v, 0]);
+      const next = createMockNext([v, v, v, v, v]);
       const player = generatePlayer(next, "FWD");
 
       expect(player.attack).toBe(80);
@@ -139,7 +135,7 @@ describe("generatePlayer", () => {
     });
 
     it("DEF: rolls correct values", () => {
-      const next = createMockNext([0, 0, 0, 0, 0, 0]);
+      const next = createMockNext([0, 0, 0, 0, 0]);
       const player = generatePlayer(next, "DEF");
 
       // defense is primary → 55
@@ -152,7 +148,7 @@ describe("generatePlayer", () => {
     });
 
     it("MID: rolls correct values", () => {
-      const next = createMockNext([0, 0, 0, 0, 0, 0]);
+      const next = createMockNext([0, 0, 0, 0, 0]);
       const player = generatePlayer(next, "MID");
 
       // passing is primary → 55
@@ -169,7 +165,7 @@ describe("generatePlayer", () => {
     it("GK: goalkeeping * 0.6 + physical * 0.2 + passing * 0.2", () => {
       // Manually set attributes via mock
       // attack=10, defense=20, passing=40, physical=50, goalkeeping=70
-      // Roll order: attack, defense, passing, physical, goalkeeping, contract
+      // Roll order: attack, defense, passing, physical, goalkeeping
       // For GK: attack→other [35,60], defense→other [35,60], passing→other [35,60], physical→other [35,60], goalkeeping→primary [55,80]
       // We need: attack=40, defense=40, passing=40, physical=50, goalkeeping=70
       // Roll for attack (other): floor(v*26)+35 = 40 → v*26=5 → v=5/26
@@ -178,7 +174,7 @@ describe("generatePlayer", () => {
       // Roll for physical (other): floor(v*26)+35 = 50 → v*26=15 → v=15/26
       // Roll for goalkeeping (primary): floor(v*26)+55 = 70 → v*26=15 → v=15/26
 
-      const next = createMockNext([rollToV(5), rollToV(5), rollToV(5), rollToV(15), rollToV(15), 0]);
+      const next = createMockNext([rollToV(5), rollToV(5), rollToV(5), rollToV(15), rollToV(15)]);
       const player = generatePlayer(next, "GK");
 
       expect(player.attack).toBe(40);
@@ -200,7 +196,7 @@ describe("generatePlayer", () => {
       // physical: floor(v*26)+35=55 → v*26=20 → v=20/26
       // goalkeeping: floor(v*26)+35=35 → v=0
 
-      const next = createMockNext([0, rollToV(15), rollToV(10), rollToV(20), 0, 0]);
+      const next = createMockNext([0, rollToV(15), rollToV(10), rollToV(20), 0]);
       const player = generatePlayer(next, "DEF");
 
       expect(player.attack).toBe(35);
@@ -222,7 +218,7 @@ describe("generatePlayer", () => {
       // physical: floor(v*26)+35=40 → v*26=5 → v=5/26
       // goalkeeping: floor(v*26)+35=35 → v=0
 
-      const next = createMockNext([rollToV(15), rollToV(25), rollToV(25), rollToV(5), 0, 0]);
+      const next = createMockNext([rollToV(15), rollToV(25), rollToV(25), rollToV(5), 0]);
       const player = generatePlayer(next, "MID");
 
       expect(player.attack).toBe(50);
@@ -244,7 +240,7 @@ describe("generatePlayer", () => {
       // physical: floor(v*26)+35=50 → v*26=15 → v=15/26
       // goalkeeping: floor(v*26)+35=35 → v=0
 
-      const next = createMockNext([rollToV(20), 0, rollToV(25), rollToV(15), 0, 0]);
+      const next = createMockNext([rollToV(20), 0, rollToV(25), rollToV(15), 0]);
       const player = generatePlayer(next, "FWD");
 
       expect(player.attack).toBe(75);
@@ -258,60 +254,11 @@ describe("generatePlayer", () => {
     });
   });
 
-  describe("contract", () => {
-    it("contract is in [1, 3]", () => {
-      for (let c = 0; c <= 2; c++) {
-        // c/3 gives: floor(c/3 * 3) + 1 = c + 1
-        const next = createMockNext([0, 0, 0, 0, 0, c / 3]);
-        const player = generatePlayer(next, "GK");
-        expect(player.contract).toBeGreaterThanOrEqual(1);
-        expect(player.contract).toBeLessThanOrEqual(3);
-      }
-    });
-
-    it("contract = 1 when next returns 0", () => {
-      const next = createMockNext([0, 0, 0, 0, 0, 0]);
-      const player = generatePlayer(next, "GK");
-      expect(player.contract).toBe(1);
-    });
-
-    it("contract = 2 when next returns 1/3", () => {
-      const next = createMockNext([0, 0, 0, 0, 0, 1 / 3]);
-      const player = generatePlayer(next, "GK");
-      expect(player.contract).toBe(2);
-    });
-
-    it("contract = 3 when next returns 2/3", () => {
-      const next = createMockNext([0, 0, 0, 0, 0, 2 / 3]);
-      const player = generatePlayer(next, "GK");
-      expect(player.contract).toBe(3);
-    });
-  });
-
-  describe("valuation", () => {
-    it("valuation = overallRating * 10000 (rounded)", () => {
-      const next = createMockNext([0, 0, 0, 0, 0, 0]);
-      const player = generatePlayer(next, "GK");
-      // GK min: 35*0.2 + 35*0.2 + 55*0.6 = 7 + 7 + 33 = 47
-      expect(player.overallRating).toBe(47);
-      expect(player.valuation).toBe(Math.round(47 * 10000));
-    });
-
-    it("valuation matches overallRating for each position group", () => {
-      const positionGroups: PositionGroup[] = ["GK", "DEF", "MID", "FWD"];
-      for (const pg of positionGroups) {
-        const next = createMockNext([0, 0, 0, 0, 0, 0]);
-        const player = generatePlayer(next, pg);
-        expect(player.valuation).toBe(Math.round(player.overallRating * 10000));
-      }
-    });
-  });
-
   describe("position group is preserved", () => {
     it("returns the correct positionGroup", () => {
       const positionGroups: PositionGroup[] = ["GK", "DEF", "MID", "FWD"];
       for (const pg of positionGroups) {
-        const next = createMockNext([0, 0, 0, 0, 0, 0]);
+        const next = createMockNext([0, 0, 0, 0, 0]);
         const player = generatePlayer(next, pg);
         expect(player.positionGroup).toBe(pg);
       }
@@ -325,7 +272,7 @@ describe("generatePlayer", () => {
       // Verify output is always within [1, 100].
       const positionGroups: PositionGroup[] = ["GK", "DEF", "MID", "FWD"];
       for (const pg of positionGroups) {
-        const next = createMockNext([0, 0, 0, 0, 0, 0]);
+        const next = createMockNext([0, 0, 0, 0, 0]);
         const player = generatePlayer(next, pg);
         expect(player.attack).toBeGreaterThanOrEqual(1);
         expect(player.attack).toBeLessThanOrEqual(100);

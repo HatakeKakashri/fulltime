@@ -67,8 +67,6 @@ async function createPlayer(
       physical: 50,
       goalkeeping: positionGroup === "GK" ? 80 : 30,
       overallRating,
-      contractSeasonsRemaining: 3,
-      baseValuation: 1000000,
     },
   });
   return player.id;

@@ -1,7 +1,7 @@
 # squad-initialization — Design Notes
 
 ## Data Model
-- `Player { id, clubId, name, positionGroup (GK|DEF|MID|FWD), attack, defense, passing, physical, goalkeeping, overallRating, contractSeasonsRemaining, baseValuation, listedForSale }`
+- `Player { id, clubId, name, positionGroup (GK|DEF|MID|FWD), attack, defense, passing, physical, goalkeeping, overallRating }`
 
 ## Overall Rating Weighting (suggested)
 - Goalkeeper: `goalkeeping * 0.6 + physical * 0.2 + passing * 0.2`
@@ -15,8 +15,6 @@
 3. For the attribute matching that position group, roll uniformly in [55, 80]; for the remaining attributes, roll uniformly in [35, 60].
 4. Add the per-club modifier to every rolled attribute, clamped to [1, 100].
 5. Compute `overallRating` via the weighting table above.
-6. Roll `contractSeasonsRemaining` uniformly in [1, 3].
-7. Compute `baseValuation = overallRating * VALUATION_SCALING_FACTOR` (configurable constant, e.g. 10,000, to be tuned during local testing).
 
 ## Naming
 Player names are out of scope for behavior specs — any placeholder/generated name scheme (e.g. procedural name lists) is an implementation detail with no gameplay impact and can be filled in freely during implementation.

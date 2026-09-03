@@ -9,13 +9,11 @@ async function main() {
   console.log(`Seeding with seed=${SEED}...`);
 
   // Clean existing data
-  await prisma.tokenBalance.deleteMany();
   await prisma.player.deleteMany();
   await prisma.club.deleteMany();
   await prisma.match.deleteMany();
   await prisma.fixture.deleteMany();
   await prisma.matchday.deleteMany();
-  await prisma.transferWindow.deleteMany();
   await prisma.season.deleteMany();
 
   // Create season
@@ -38,9 +36,6 @@ async function main() {
         id: club.id,
         name: club.name,
         seasonId: season.id,
-        tokenBalance: {
-          create: { balance: 1_000_000 },
-        },
         players: {
           create: club.players.map((p) => ({
             name: `${club.name} Player`,
@@ -51,8 +46,6 @@ async function main() {
             physical: p.physical,
             goalkeeping: p.goalkeeping,
             overallRating: p.overallRating,
-            contractSeasonsRemaining: p.contract,
-            baseValuation: p.valuation,
           })),
         },
       },
@@ -68,10 +61,9 @@ async function main() {
   // Verify
   const clubCount = await prisma.club.count();
   const playerCount = await prisma.player.count();
-  const tokenCount = await prisma.tokenBalance.count();
   const matchdayCount = await prisma.matchday.count({ where: { seasonId: season.id } });
   const fixtureCount = await prisma.fixture.count({ where: { matchday: { seasonId: season.id } } });
-  console.log(`Verification: ${clubCount} clubs, ${playerCount} players, ${tokenCount} token balances`);
+  console.log(`Verification: ${clubCount} clubs, ${playerCount} players`);
   console.log(`Season: ${matchdayCount} matchdays, ${fixtureCount} fixtures`);
   console.log("Seed complete!");
 }

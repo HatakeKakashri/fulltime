@@ -7,8 +7,6 @@ export interface PlayerData {
   physical: number;
   goalkeeping: number;
   overallRating: number;
-  contract: number;
-  valuation: number;
   positionGroup: PositionGroup;
 }
 
@@ -94,9 +92,6 @@ export function generatePlayer(
     positionGroup,
   );
 
-  const contract = Math.floor(next() * 3) + 1;
-  const valuation = Math.round(overallRating * 10000);
-
   return {
     attack,
     defense,
@@ -104,8 +99,6 @@ export function generatePlayer(
     physical,
     goalkeeping,
     overallRating,
-    contract,
-    valuation,
     positionGroup,
   };
 }

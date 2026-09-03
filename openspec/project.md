@@ -6,8 +6,6 @@ Single-league football club management simulation (MVP), structurally modeled on
 ## MVP Scope Summary
 - 20 clubs, single division, full home/away round robin (380 matches/season), no promotion/relegation, no result-based rewards or penalties.
 - Deterministic, event-based, probabilistic match simulation — server-authoritative, result-only client delivery.
-- Transfer market with per-manager scout lists, restricted bid eligibility, and tiered pricing.
-- Flat token allocation with a single spending sink (transfer bids).
 - Web client across mobile/tablet/laptop/desktop, functioning as a read-only observation dashboard (no accounts/auth in MVP).
 
 ## Explicitly Out of Scope (this spec set)
@@ -18,6 +16,7 @@ Single-league football club management simulation (MVP), structurally modeled on
 - Any monetization or real-money currency path
 - Parallel match simulation
 - Pause functionality in live matches (ruled out permanently, not just deferred)
+- Transfer market, bot transfer decision-making, and token economy (removed from MVP scope — single-season league simulation only)
 
 Where any of the above is referenced elsewhere in this spec set, treat it as forward-compatibility guidance for future architecture only — it is not specified in detail here.
 
@@ -38,9 +37,6 @@ Where any of the above is referenced elsewhere in this spec set, treat it as for
 |---|---|
 | `season-scheduling` | League structure, round-robin fixture generation, matchday sequencing |
 | `match-simulation` | Deterministic event-based match engine |
-| `transfer-market` | Transfer windows, scout lists, bid eligibility, pricing |
-| `bot-transfer-behavior` | Bot buy/sell decision logic |
-| `token-economy` | Token issuance and spending rules |
 | `web-client-delivery` | Client platform and server-authoritative boundary |
 | `squad-initialization` | Initial squad/player generation |
 | `starting-xi-selection` | Automatic lineup selection |
