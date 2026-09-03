@@ -12,10 +12,11 @@
     "bun-types": "^1.4.0"
   },
   "dependencies": {
-    "prisma": "^6.0.0",
     "@prisma/client": "^6.0.0",
-    "@trpc/server": "^11.18.0",
     "@trpc/client": "^11.18.0",
+    "@trpc/server": "^11.18.0",
+    "prisma": "^6.0.0",
+    "superjson": "^2.2.6",
     "zod": "^4.5.4"
   },
   "peerDependencies": {

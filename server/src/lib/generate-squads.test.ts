@@ -28,9 +28,14 @@ describe("generateSquads", () => {
     }
   });
 
-  it("should be deterministic: same seed produces identical output", () => {
+  it("should be deterministic for non-ID fields: same seed produces identical (name, players)", () => {
     const league2 = generateSquads(seed);
-    expect(league2).toEqual(league);
+    // UUIDs are intentionally non-deterministic across calls (crypto.randomUUID),
+    // so compare only the deterministic parts: name sequence + per-player attributes.
+    expect(league2.clubs.map((c) => c.name)).toEqual(league.clubs.map((c) => c.name));
+    for (let i = 0; i < league.clubs.length; i++) {
+      expect(league2.clubs[i]!.players).toEqual(league.clubs[i]!.players);
+    }
   });
 
   it("should apply club modifiers: attributes should vary between clubs", () => {
@@ -45,11 +50,15 @@ describe("generateSquads", () => {
     expect(hasDifference).toBe(true);
   });
 
-  it("should have club IDs from 'club-1' through 'club-20'", () => {
+  it("should assign each club a unique UUID v4", () => {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const ids = new Set<string>();
     for (let i = 0; i < 20; i++) {
       const club = league.clubs[i];
       if (!club) throw new Error(`Club ${i} not found`);
-      expect(club.id).toBe(`club-${i + 1}`);
+      expect(club.id).toMatch(uuidRegex);
+      ids.add(club.id);
     }
+    expect(ids.size).toBe(20);
   });
 });

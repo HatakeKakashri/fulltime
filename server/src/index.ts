@@ -1,4 +1,5 @@
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
+import superjson from "superjson";
 import { appRouter } from "./trpc/router";
 import { createContext } from "./trpc/context";
 
@@ -11,7 +12,7 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
-const port = 3001;
+const port = 3000;
 
 const trpcHandler = async (req: Request): Promise<Response> => {
   // Short-circuit CORS preflight for the Vite dev origin.
@@ -23,6 +24,10 @@ const trpcHandler = async (req: Request): Promise<Response> => {
     req,
     router: appRouter,
     createContext,
+    // superjson transformer enables the `{"json": ...}` request body format
+    // that @trpc/client produces by default, plus Date/BigInt/Map/Set support
+    // in procedure inputs/outputs (used by match.result for simulatedAt).
+    transformer: superjson,
     // tRPC v11 defaults queries to GET only; allow POST too so browser
     // clients that pre-PORT to the procedure (the canonical tRPC pattern
     // used in @trpc/client) work without an extra GET-only round-trip.
