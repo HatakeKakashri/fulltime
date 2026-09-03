@@ -6,7 +6,7 @@ The simulation pipeline is complete: 20 clubs with squads, full 380-fixture roun
 
 ## What Changes
 
-- **BREAKING** Replace the bare `Bun.serve` stub in `server/src/index.ts` with the project's declared stack: a Fastify HTTP server hosting a tRPC router, preserving the existing CORS preflight behavior for `http://localhost:5173`
+- **BREAKING** Replace the bare `Bun.serve` stub in `server/src/index.ts` with `Bun.serve` + `@trpc/server` fetch adapter (drop Fastify dependency per Bun runtime constraint — `@trpc/server` Fastify ESM adapter is incompatible with Bun runtime; use the official `fetchRequestHandler` from `@trpc/server/adapters/fetch` directly inside `Bun.serve({ routes })` instead). CORS preflight behavior for `http://localhost:5173` is preserved, handled inline in the fetch handler.
 - Introduce a tRPC `AppRouter` exposing four read-only procedures: `league.standings`, `league.fixtures`, `match.result`, and `club.squad`
 - Implement league standings as a pure derivation function over completed `Match` rows (no persisted standings model — aligns with the `season-scheduling` design note that standings are derived/non-authoritative)
 - Add zod input/output schemas for each procedure to enforce the result-only contract (only `status = COMPLETED` matches are returned by `match.result`)
@@ -25,9 +25,9 @@ The simulation pipeline is complete: 20 clubs with squads, full 380-fixture roun
 ## Impact
 
 - **New files**: `server/src/trpc/router.ts`, `server/src/trpc/context.ts`, `server/src/derivation/standings.ts`, `server/src/trpc/procedures/*.ts`, plus corresponding test files
-- **Modified files**: `server/src/index.ts` (replaced stub with Fastify + tRPC mount), `server/package.json` (add deps)
+- **Modified files**: `server/src/index.ts` (replaced stub with `Bun.serve` + `@trpc/server` fetch adapter), `server/package.json` (drop fastify deps; keep tRPC + zod)
 - **Deletions**: `server/src/bot-transfer-behavior.ts`, `server/src/transfer-window.ts`, and any related test files that became dead after `descope-transfer-market`
-- **Dependencies added**: `fastify`, `@fastify/cors`, `@trpc/server`, `@trpc/client`, `zod`, and matching `@trpc/client` + `zod` in `client/` and `shared/` package.jsons so types can be re-exported for the future client
+- **Dependencies added**: `@trpc/server`, `@trpc/client`, `zod`, and matching `@trpc/client` + `zod` in `client/` and `shared/` package.jsons so types can be re-exported for the future client. **Fastify dropped**: `fastify`, `@fastify/cors`, and `fastify-plugin` are removed because `@trpc/server/adapters/fastify` is ESM-incompatible with Bun's runtime; tRPC's `fetchRequestHandler` is used directly inside `Bun.serve({ routes })` (the same pattern as [`merthanmerter/burt`](https://github.com/merthanmerter/burt)).
 - **Shared types**: `shared/` populates the tRPC `AppRouter` type export consumed by the future React/Vite client (this change does not build the client itself — that is the next change)
 - **Prisma**: read-only queries against existing `Season`, `Matchday`, `Fixture`, `Match`, `Club`, `StartingXI`, `Player` models; no schema changes
 - **Risk surfaces**: `Match.status` casing mismatch between Prisma default (`COMPLETED`) and any code path using lowercase (`completed`) — must be reconciled before `match.result` queries filter on it; standings derivation is a new pure function and must be locked down with deterministic unit tests before the client depends on its output ordering
