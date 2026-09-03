@@ -82,7 +82,7 @@ After completing all tasks, run the following and confirm each passes:
 
 - [x] `npx prisma validate` passes — "The schema at server/prisma/schema.prisma is valid 🚀"
 - [x] `npx prisma migrate dev --name remove-transfer-market-scope` applies cleanly against a clean local Postgres — "Already in sync, no schema change or pending migration"; `prisma migrate status` confirms "Database schema is up to date!"
-- [x] `bun run seed` completes successfully: 20 clubs, 400 players, starting XIs computed for all clubs, no token/contract fields referenced anywhere in output — output: "Generated 20 clubs with 400 players", "Generated 380 fixtures across 38 matchdays", "Verification: 20 clubs, 400 players"
+- [x] `bun run seed` completes successfully: 20 clubs, 400 players, starting XIs computed for all clubs, no token/contract fields referenced anywhere in output — output: "Generated 20 clubs with 400 players", "Generated 380 fixtures across 38 matchdays", "Verification: 20 clubs, 400 players" (also fixed seed.ts cleanup order to respect foreign keys: StartingXI → Match → Fixture → Player → Club → Matchday → Season)
 - [ ] `bun run server/src/index.ts` starts without errors — not verified (requires full server startup, outside scope of descope change)
 - [x] `grep -r "TokenBalance\|TransferWindow" server/src/` returns nothing — verified clean
 - [x] `grep -r "bot-transfer-behavior\|transfer-window" server/src/` returns nothing outside deleted files (i.e., no dangling imports) — verified clean

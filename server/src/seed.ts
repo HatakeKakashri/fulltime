@@ -8,11 +8,12 @@ const SEED = Number(process.env.SEED) || 42;
 async function main() {
   console.log(`Seeding with seed=${SEED}...`);
 
-  // Clean existing data
-  await prisma.player.deleteMany();
-  await prisma.club.deleteMany();
+  // Clean existing data (order respects foreign keys)
+  await prisma.startingXI.deleteMany();
   await prisma.match.deleteMany();
   await prisma.fixture.deleteMany();
+  await prisma.player.deleteMany();
+  await prisma.club.deleteMany();
   await prisma.matchday.deleteMany();
   await prisma.season.deleteMany();
 
