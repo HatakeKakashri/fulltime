@@ -36,3 +36,21 @@ Since MVP has no human-controlled manager, the client SHALL function as a read-o
 - GIVEN the MVP web client
 - WHEN it is accessed
 - THEN it is usable without any login or account creation step, and presents the same read-only league/match/transfer-market views to any visitor
+
+### Requirement: Landscape-Only Match Detail on Mobile
+The match result detail page SHALL render in landscape orientation on mobile devices. When the device is in portrait mode on a mobile viewport, the client SHALL display a "rotate your device" prompt and hide the match detail content.
+
+#### Scenario: Viewing match detail on mobile in portrait
+- GIVEN the match result detail page is loaded on a mobile device
+- WHEN the device is in portrait orientation
+- THEN a "rotate your device" prompt is displayed and the match detail content is hidden
+
+#### Scenario: Viewing match detail on mobile in landscape
+- GIVEN the match result detail page is loaded on a mobile device
+- WHEN the device is in landscape orientation
+- THEN the match detail content is displayed and no rotate prompt is shown
+
+#### Scenario: Viewing match detail on desktop
+- GIVEN the match result detail page is loaded on a desktop browser
+- WHEN the page renders at any window size or orientation
+- THEN the match detail content is displayed without any rotate prompt, regardless of window orientation

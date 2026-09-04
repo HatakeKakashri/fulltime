@@ -49,5 +49,5 @@ server-side tRPC API. Tasks are ordered by dependency.
 ## 7. Cleanup + Validation
 
 - [x] 7.1 Run verification gates in order: `bun test client/src/`, `npx tsc --noEmit --project client/tsconfig.json`, `bun run client/build` — all three must exit 0 with no type errors or build errors
-- [ ] 7.2 Smoke check live: boot `bun run server/src/index.ts` (server on 3001), boot `bun run client/dev` (client on 5173), open browser — league standings show 20 clubs, clicking a match shows result detail, clicking a club shows squad; verify CORS allows client origin `http://localhost:5173`
-- [ ] 7.3 Verify mobile landscape enforcement: open match detail on mobile viewport (DevTools device mode), confirm portrait shows rotate prompt, landscape shows content; confirm other pages (league, squad) render freely in any orientation
+- [x] 7.2 Smoke check live: boot `bun run server/src/index.ts` (server on 3001), boot `bun run client/dev` (client on 5173), open browser — league standings show 20 clubs, clicking a match shows result detail, clicking a club shows squad; verify CORS allows client origin `http://localhost:5173`
+- [x] 7.3 Verify mobile landscape enforcement: open match detail on mobile viewport (DevTools device mode), confirm portrait shows rotate prompt, landscape shows content; confirm other pages (league, squad) render freely in any orientation
