@@ -30,6 +30,14 @@ const MatchEventSchema = z.object({
   outcome: z.string(),
 });
 
+const StatsSchema = z.object({
+  shots: z.number(),
+  shotsOnTarget: z.number(),
+  corners: z.number(),
+  fouls: z.number(),
+  yellowCards: z.number(),
+});
+
 const MatchViewSchema = z.object({
   id: z.string(),
   fixtureId: z.string(),
@@ -40,6 +48,10 @@ const MatchViewSchema = z.object({
   homeScore: z.number().int(),
   awayScore: z.number().int(),
   eventLog: z.array(MatchEventSchema),
+  stats: z.object({
+    home: StatsSchema,
+    away: StatsSchema,
+  }),
   status: z.string(),
   simulatedAt: z.date(),
 });
@@ -47,6 +59,47 @@ const MatchViewSchema = z.object({
 const OutputSchema = z.object({
   match: MatchViewSchema,
 });
+
+/**
+ * Aggregate per-team event counts from a parsed match event log.
+ *
+ * Derived counters:
+ *   - shots / shotsOnTarget (shot_attempt with outcome goal|saved)
+ *   - corners (corner)
+ *   - fouls / yellowCards (foul with outcome yellow_card)
+ */
+function computeMatchStats(
+  eventLog: z.infer<typeof MatchEventSchema>[],
+  homeClubId: string,
+  awayClubId: string
+) {
+  const stats = {
+    home: { shots: 0, shotsOnTarget: 0, corners: 0, fouls: 0, yellowCards: 0 },
+    away: { shots: 0, shotsOnTarget: 0, corners: 0, fouls: 0, yellowCards: 0 },
+  };
+
+  for (const event of eventLog) {
+    const side = event.teamId === homeClubId ? "home" : "away";
+    switch (event.type) {
+      case "shot_attempt":
+        stats[side].shots++;
+        if (event.outcome === "goal" || event.outcome === "saved") {
+          stats[side].shotsOnTarget++;
+        }
+        break;
+      case "corner":
+        stats[side].corners++;
+        break;
+      case "foul":
+        stats[side].fouls++;
+        if (event.outcome === "yellow_card") {
+          stats[side].yellowCards++;
+        }
+        break;
+    }
+  }
+  return stats;
+}
 
 export const matchResult = publicProcedure
   .input(InputSchema)
@@ -97,6 +150,12 @@ export const matchResult = publicProcedure
       eventLog = [];
     }
 
+    const stats = computeMatchStats(
+      eventLog,
+      match.fixture.homeClubId,
+      match.fixture.awayClubId
+    );
+
     return {
       match: {
         id: match.id,
@@ -108,6 +167,7 @@ export const matchResult = publicProcedure
         homeScore: match.homeScore,
         awayScore: match.awayScore,
         eventLog,
+        stats,
         status: match.status,
         simulatedAt: match.simulatedAt,
       },

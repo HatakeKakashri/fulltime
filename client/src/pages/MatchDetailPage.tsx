@@ -1,5 +1,92 @@
 import { useParams } from "react-router-dom";
+import type { inferRouterOutputs } from "@trpc/server";
+import type { AppRouter } from "../../../server/src/trpc/router";
 import { trpc } from "../trpc/client";
+
+// ─── Type extraction ──────────────────────────────────────────────────────────
+//
+// Pull the strongly-typed `match.result` output straight from the AppRouter
+// type instead of redeclaring the shape client-side. `data.match.eventLog[i].type`
+// is therefore typed as the `MatchEventType` union from
+// `server/src/lib/constants/match-event-type.ts` — TypeScript will catch any
+// typo'd comparison string here.
+
+type RouterOutputs = inferRouterOutputs<AppRouter>;
+type MatchResult = RouterOutputs["match"]["result"];
+type MatchView = MatchResult["match"];
+type MatchEvent = MatchView["eventLog"][number];
+type MatchStats = MatchView["stats"];
+
+// ─── Event rendering ─────────────────────────────────────────────────────────
+
+/**
+ * Map a raw event to a human-readable label and Tailwind class.
+ *
+ * Goals and cards are the only events that warrant special coloring —
+ * everything else just gets the default slate label with a humanized name.
+ *
+ * - shot_attempt + outcome "goal"     → "⚽ Goal" (green)
+ * - shot_attempt + anything else      → "Shot (outcome)"
+ * - foul + outcome "yellow_card"      → "🟨 Card" (yellow)
+ * - foul + anything else              → "Foul (outcome)"
+ * - corner / free_kick / tackle / pass / dribble → capitalized type
+ */
+function renderEventLabel(event: MatchEvent): {
+  text: string;
+  className: string;
+} {
+  if (event.type === "shot_attempt") {
+    if (event.outcome === "goal") {
+      return { text: "⚽ Goal", className: "text-green-600 font-semibold" };
+    }
+    return {
+      text: event.outcome ? `Shot (${event.outcome})` : "Shot",
+      className: "text-slate-600",
+    };
+  }
+
+  if (event.type === "foul") {
+    if (event.outcome === "yellow_card") {
+      return { text: "🟨 Card", className: "text-yellow-500 font-semibold" };
+    }
+    return {
+      text: event.outcome ? `Foul (${event.outcome})` : "Foul",
+      className: "text-slate-600",
+    };
+  }
+
+  const label =
+    event.type.charAt(0).toUpperCase() + event.type.slice(1).replace(/_/g, " ");
+  return { text: label, className: "text-slate-600" };
+}
+
+// ─── Stats rendering ──────────────────────────────────────────────────────────
+
+interface StatRow {
+  label: string;
+  home: number;
+  away: number;
+}
+
+function buildStatRows(stats: MatchStats): StatRow[] {
+  return [
+    { label: "Shots", home: stats.home.shots, away: stats.away.shots },
+    {
+      label: "Shots on Target",
+      home: stats.home.shotsOnTarget,
+      away: stats.away.shotsOnTarget,
+    },
+    { label: "Corners", home: stats.home.corners, away: stats.away.corners },
+    { label: "Fouls", home: stats.home.fouls, away: stats.away.fouls },
+    {
+      label: "Yellow Cards",
+      home: stats.home.yellowCards,
+      away: stats.away.yellowCards,
+    },
+  ];
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export function MatchDetailPage() {
   const { matchId } = useParams<{ matchId: string }>();
@@ -47,7 +134,46 @@ export function MatchDetailPage() {
                   </span>
                 </div>
               </div>
-              <div className="mt-2 text-center text-sm text-slate-500">Full Time</div>
+              <div className="mt-2 text-center text-sm text-slate-500">
+                Full Time
+              </div>
+            </section>
+
+            {/* Match Stats */}
+            <section className="bg-white rounded-lg shadow p-4">
+              <h2 className="text-base font-semibold mb-3 text-slate-800">
+                Match Stats
+              </h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-slate-500 text-xs uppercase tracking-wide">
+                      <th className="py-2 text-right font-medium">
+                        {data.match.homeClubName}
+                      </th>
+                      <th className="py-2 text-center font-medium">Stat</th>
+                      <th className="py-2 text-left font-medium">
+                        {data.match.awayClubName}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {buildStatRows(data.match.stats).map((row) => (
+                      <tr key={row.label}>
+                        <td className="py-2 text-right font-bold text-slate-900">
+                          {row.home}
+                        </td>
+                        <td className="py-2 text-center text-slate-600">
+                          {row.label}
+                        </td>
+                        <td className="py-2 text-left font-bold text-slate-900">
+                          {row.away}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </section>
 
             {/* Event Log */}
@@ -57,28 +183,25 @@ export function MatchDetailPage() {
                   Match Events
                 </h2>
                 <div className="space-y-2">
-                  {data.match.eventLog.map((event, i: number) => (
-                    <div
-                      key={i}
-                      className="flex items-center gap-3 text-sm py-1 border-b border-slate-100 last:border-0"
-                    >
-                      <span className="text-slate-400 w-12 text-right">
-                        {event.minute}'
-                      </span>
-                      <span
-                        className={`font-medium ${
-                          event.type === "GOAL"
-                            ? "text-green-600"
-                            : event.type === "CARD"
-                            ? "text-yellow-500"
-                            : "text-slate-600"
-                        }`}
+                  {data.match.eventLog.map((event, i: number) => {
+                    const { text, className } = renderEventLabel(event);
+                    return (
+                      <div
+                        key={i}
+                        className="flex items-center gap-3 text-sm py-1 border-b border-slate-100 last:border-0"
                       >
-                        {event.type}
-                      </span>
-                      <span className="text-slate-700">{event.playerId}</span>
-                    </div>
-                  ))}
+                        <span className="text-slate-400 w-12 text-right">
+                          {event.minute}'
+                        </span>
+                        <span className={`font-medium ${className}`}>
+                          {text}
+                        </span>
+                        <span className="text-slate-700">
+                          {event.playerId}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </section>
             )}

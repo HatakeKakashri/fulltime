@@ -1,8 +1,31 @@
-import { BrowserRouter, Link, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Link, NavLink, Route, Routes } from "react-router-dom";
 import { TRPCProvider } from "./trpc/provider";
 import { LeaguePage } from "./pages/LeaguePage";
 import { MatchDetailPage } from "./pages/MatchDetailPage";
 import { ClubSquadPage } from "./pages/ClubSquadPage";
+import { FixturesPage } from "./pages/FixturesPage";
+
+function NavItem({
+  to,
+  label,
+}: {
+  to: string;
+  label: string;
+}) {
+  return (
+    <NavLink
+      to={to}
+      end={to === "/"}
+      className={({ isActive }) =>
+        `text-sm hover:text-slate-300 ${
+          isActive ? "text-white font-semibold underline" : "text-slate-300"
+        }`
+      }
+    >
+      {label}
+    </NavLink>
+  );
+}
 
 function NotFound() {
   return (
@@ -28,10 +51,15 @@ export function App() {
             <span className="text-slate-400 text-sm">
               League Simulation MVP
             </span>
+            <div className="ml-auto flex items-center gap-4">
+              <NavItem to="/" label="League" />
+              <NavItem to="/fixtures" label="Fixtures" />
+            </div>
           </nav>
           <main className="p-4">
             <Routes>
               <Route path="/" element={<LeaguePage />} />
+              <Route path="/fixtures" element={<FixturesPage />} />
               <Route path="/match/:matchId" element={<MatchDetailPage />} />
               <Route path="/club/:clubId" element={<ClubSquadPage />} />
               <Route path="*" element={<NotFound />} />

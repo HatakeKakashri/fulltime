@@ -13,6 +13,8 @@ const PREFIX = "match-result-int";
 let testSeasonIds: string[] = [];
 let upperMatchId: string;
 let lowerMatchId: string;
+let upperHomeClubId: string;
+let upperAwayClubId: string;
 
 /**
  * Build a minimal fixture (season → matchday → fixture → match) so we can
@@ -24,7 +26,7 @@ async function buildMatchRow(
   homeScore: number,
   awayScore: number,
   matchdayIndex: number
-): Promise<{ matchId: string; _seasonId: string }> {
+): Promise<{ matchId: string; _seasonId: string; homeClubId: string; awayClubId: string }> {
   const season = await prisma.season.create({
     data: { startDate: new Date("2026-01-01"), status: "INITIALIZED" },
   });
@@ -61,7 +63,12 @@ async function buildMatchRow(
     where: { id: fixture.id },
     data: { matchId: match.id },
   });
-  return { matchId: match.id, _seasonId: season.id };
+  return {
+    matchId: match.id,
+    _seasonId: season.id,
+    homeClubId: clubA.id,
+    awayClubId: clubB.id,
+  };
 }
 
 // ─── Lifecycle ───────────────────────────────────────────────────────────────
@@ -81,8 +88,30 @@ beforeAll(async () => {
   testSeasonIds = [];
 
   // Create one row per status.
+  // `upper` uses a richer event log to exercise every stats branch:
+  //   Home (clubA): 3 shots (2 on target: goal + saved, 1 missed), 1 corner,
+  //                 1 foul (no card)
+  //   Away (clubB): 1 shot on target (goal), 1 foul (yellow_card)
   const upper = await buildMatchRow("COMPLETED", 2, 1, 1);
+  const upperHome = upper.homeClubId;
+  const upperAway = upper.awayClubId;
+  await prisma.match.update({
+    where: { id: upper.matchId },
+    data: {
+      eventLogJson: JSON.stringify([
+        { minute: 10, type: "shot_attempt", teamId: upperHome, playerId: "p1", outcome: "goal" },
+        { minute: 25, type: "shot_attempt", teamId: upperHome, playerId: "p2", outcome: "saved" },
+        { minute: 40, type: "shot_attempt", teamId: upperHome, playerId: "p3", outcome: "missed" },
+        { minute: 55, type: "corner", teamId: upperHome, playerId: "p4", outcome: "" },
+        { minute: 60, type: "foul", teamId: upperHome, playerId: "p5", outcome: "no_card" },
+        { minute: 70, type: "shot_attempt", teamId: upperAway, playerId: "p6", outcome: "goal" },
+        { minute: 75, type: "foul", teamId: upperAway, playerId: "p7", outcome: "yellow_card" },
+      ]),
+    },
+  });
   upperMatchId = upper.matchId;
+  upperHomeClubId = upperHome;
+  upperAwayClubId = upperAway;
   testSeasonIds.push(upper._seasonId);
   const lower = await buildMatchRow("completed", 0, 5, 2);
   lowerMatchId = lower.matchId;
@@ -115,13 +144,34 @@ describe("match.result", () => {
     const result = await caller.match.result({ matchId: upperMatchId });
 
     expect(result.match.id).toBe(upperMatchId);
+    expect(result.match.homeClubId).toBe(upperHomeClubId);
+    expect(result.match.awayClubId).toBe(upperAwayClubId);
     expect(result.match.homeScore).toBe(2);
     expect(result.match.awayScore).toBe(1);
     expect(result.match.status).toBe("COMPLETED");
     expect(result.match.eventLog).toBeArray();
-    expect(result.match.eventLog.length).toBe(1);
+    expect(result.match.eventLog.length).toBe(7);
     expect(result.match.eventLog[0].type).toBe("shot_attempt");
     expect(result.match.simulatedAt).toBeInstanceOf(Date);
+
+    // Stats computed from the upper match's event log:
+    //   Home: 3 shots (2 on target: goal + saved, 1 missed), 1 corner,
+    //         1 foul (no card)
+    //   Away: 1 shot on target (goal), 1 foul (yellow_card)
+    expect(result.match.stats.home).toEqual({
+      shots: 3,
+      shotsOnTarget: 2,
+      corners: 1,
+      fouls: 1,
+      yellowCards: 0,
+    });
+    expect(result.match.stats.away).toEqual({
+      shots: 1,
+      shotsOnTarget: 1,
+      corners: 0,
+      fouls: 1,
+      yellowCards: 1,
+    });
   });
 
   test("rejects the lowercase-status row (returns NOT_FOUND)", async () => {

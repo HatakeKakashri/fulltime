@@ -1,13 +1,12 @@
 import { describe, it, expect } from "bun:test";
 import { render, screen } from "@testing-library/react";
-import { MatchDetailPage } from "./MatchDetailPage";
+import { FixturesPage } from "./FixturesPage";
 import { httpBatchLink } from "@trpc/client";
 import superjson from "superjson";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createTRPCReact } from "@trpc/react-query";
 import type { AppRouter } from "../../../server/src/trpc/router";
 import { BrowserRouter } from "react-router-dom";
-import { Route, Routes } from "react-router-dom";
 
 const trpc = createTRPCReact<AppRouter>();
 
@@ -24,27 +23,20 @@ function TestWrapper({ children }: { children: React.ReactNode }) {
   return (
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/match/:matchId" element={children} />
-          </Routes>
-        </BrowserRouter>
+        <BrowserRouter>{children}</BrowserRouter>
       </QueryClientProvider>
     </trpc.Provider>
   );
 }
 
-describe("MatchDetailPage", () => {
+describe("FixturesPage", () => {
   it("renders without crashing", () => {
     render(
       <TestWrapper>
-        <MatchDetailPage />
+        <FixturesPage />
       </TestWrapper>
     );
-    // Page should show loading or content area. The page uses mobile landscape
-    // enforcement via `max-md:portrait:hidden`, so in the default happy-dom
-    // viewport (mobile-portrait) the content area is hidden — we only assert
-    // the component mounts without throwing.
-    expect(document.body).toBeDefined();
+    // Page renders in loading state (no live server in test)
+    expect(screen.getByText(/Loading fixtures/i)).toBeDefined();
   });
 });
