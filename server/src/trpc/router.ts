@@ -2,6 +2,7 @@ import { initTRPC } from "@trpc/server";
 import { z } from "zod";
 import { leagueStandings } from "./procedures/league-standings";
 import { leagueFixtures } from "./procedures/league-fixtures";
+import { leagueCurrentSeason } from "./procedures/league-current-season";
 import { matchResult } from "./procedures/match-result";
 import { clubSquad } from "./procedures/club-squad";
 import { router } from "./init";
@@ -17,6 +18,7 @@ export const appRouter = router({
   league: router({
     standings: leagueStandings,
     fixtures: leagueFixtures,
+    currentSeason: leagueCurrentSeason,
   }),
   match: router({
     result: matchResult,

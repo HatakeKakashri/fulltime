@@ -10,6 +10,10 @@ import { MATCH_STATUS } from "../../lib/constants/match-status";
  * any other status (including the legacy lowercase "completed" rows that
  * pre-existed the casing reconciliation in task 4.1).
  *
+ * Includes `homeClubName` and `awayClubName` by resolving the fixture's
+ * club IDs against the Club table, so the client can render a meaningful
+ * scoreboard instead of truncated UUIDs.
+ *
  * Errors:
  *   - NOT_FOUND — unknown matchId OR row exists but status != COMPLETED
  */
@@ -30,6 +34,8 @@ const MatchViewSchema = z.object({
   fixtureId: z.string(),
   homeClubId: z.string(),
   awayClubId: z.string(),
+  homeClubName: z.string(),
+  awayClubName: z.string(),
   homeScore: z.number().int(),
   awayScore: z.number().int(),
   eventLog: z.array(MatchEventSchema),
@@ -51,7 +57,12 @@ export const matchResult = publicProcedure
         status: MATCH_STATUS.COMPLETED,
       },
       include: {
-        fixture: { select: { homeClubId: true, awayClubId: true } },
+        fixture: {
+          select: {
+            homeClubId: true,
+            awayClubId: true,
+          },
+        },
       },
     });
 
@@ -61,6 +72,18 @@ export const matchResult = publicProcedure
         message: "Match not found or not completed",
       });
     }
+
+    // Resolve club names from the fixture's club IDs
+    const [homeClub, awayClub] = await Promise.all([
+      ctx.prisma.club.findUnique({
+        where: { id: match.fixture.homeClubId },
+        select: { name: true },
+      }),
+      ctx.prisma.club.findUnique({
+        where: { id: match.fixture.awayClubId },
+        select: { name: true },
+      }),
+    ]);
 
     let eventLog: z.infer<typeof MatchEventSchema>[] = [];
     try {
@@ -79,6 +102,8 @@ export const matchResult = publicProcedure
         fixtureId: match.fixtureId,
         homeClubId: match.fixture.homeClubId,
         awayClubId: match.fixture.awayClubId,
+        homeClubName: homeClub?.name ?? match.fixture.homeClubId,
+        awayClubName: awayClub?.name ?? match.fixture.awayClubId,
         homeScore: match.homeScore,
         awayScore: match.awayScore,
         eventLog,
