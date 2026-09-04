@@ -2,7 +2,7 @@ import { createPRNG } from "./prng";
 import { generatePlayer, type PositionGroup, type PlayerData } from "./generate-players";
 
 export interface ClubData {
-  id: string;  // "club-1" through "club-20"
+  id: string;  // UUID v4 (Prisma @default(uuid()))
   name: string;
   players: PlayerData[];
 }
@@ -58,7 +58,7 @@ export function generateSquads(seed: number): LeagueData {
     });
     
     clubs.push({
-      id: `club-${i + 1}`,
+      id: crypto.randomUUID(),
       name: `Club ${i + 1}`,
       players,
     });
