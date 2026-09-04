@@ -2,6 +2,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { publicProcedure } from "../init";
 import { MATCH_STATUS } from "../../lib/constants/match-status";
+import { MATCH_EVENT_TYPE } from "../../lib/constants/match-event-type";
 
 /**
  * `match.result` — completed-match record by id.
@@ -23,7 +24,7 @@ const InputSchema = z.object({
 
 const MatchEventSchema = z.object({
   minute: z.number(),
-  type: z.string(),
+  type: z.enum(Object.values(MATCH_EVENT_TYPE) as [string, ...string[]]),
   teamId: z.string(),
   playerId: z.string(),
   outcome: z.string(),

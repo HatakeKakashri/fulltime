@@ -103,24 +103,6 @@ export function LeaguePage() {
           </table>
         </div>
       </section>
-
-      {/* Club Selector */}
-      <section>
-        <h2 className="text-xl font-semibold mb-3 text-slate-800">
-          View Club Squads
-        </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-          {clubs.map((row) => (
-            <button
-              key={row.clubId}
-              onClick={() => navigate(`/club/${row.clubId}`)}
-              className="px-3 py-2 text-left bg-white border border-slate-200 rounded hover:border-slate-400 hover:bg-slate-50 transition-colors text-sm font-medium text-slate-700 truncate"
-            >
-              {row.clubName}
-            </button>
-          ))}
-        </div>
-      </section>
     </div>
   );
 }

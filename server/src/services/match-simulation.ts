@@ -2,6 +2,7 @@ import { prisma } from '../db';
 import { getStartingXI } from './starting-xi';
 import { createPRNG } from '../lib/prng';
 import { MATCH_STATUS } from '../lib/constants/match-status';
+import type { MatchEventType } from '../lib/constants/match-event-type';
 import type { Match, Fixture, Player } from '@prisma/client';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -16,7 +17,7 @@ export interface TeamSnapshot {
 
 export interface MatchEvent {
   minute: number;
-  type: string;
+  type: MatchEventType;
   teamId: string;
   playerId: string;
   outcome: string;
@@ -55,7 +56,7 @@ function clamp(value: number, min: number, max: number): number {
 // ─── Event Generation ────────────────────────────────────────────────────────
 
 interface EventTemplate {
-  type: string;
+  type: MatchEventType;
   weight: number;
   outcomeWeights: Record<string, number>;
 }
