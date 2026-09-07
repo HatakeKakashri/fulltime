@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { skipToken } from "@tanstack/react-query";
 import { trpc } from "../trpc/client";
+import { SeasonControlPanel } from "../components/SeasonControlPanel";
 
 export function LeaguePage() {
   const navigate = useNavigate();
@@ -48,6 +49,9 @@ export function LeaguePage() {
 
   return (
     <div className="space-y-8">
+      {/* Season Control Panel — hidden when season is COMPLETED */}
+      <SeasonControlPanel />
+
       {/* League Standings */}
       <section>
         <h1 className="text-2xl font-bold mb-4 text-slate-900">

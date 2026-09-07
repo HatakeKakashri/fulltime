@@ -5,6 +5,10 @@ import { leagueFixtures } from "./procedures/league-fixtures";
 import { leagueCurrentSeason } from "./procedures/league-current-season";
 import { matchResult } from "./procedures/match-result";
 import { clubSquad } from "./procedures/club-squad";
+import {
+  seasonSimulateNextMatchday,
+  seasonSimulateFullSeason,
+} from "./procedures/season-simulate";
 import { router } from "./init";
 
 /**
@@ -25,6 +29,10 @@ export const appRouter = router({
   }),
   club: router({
     squad: clubSquad,
+  }),
+  season: router({
+    simulateNextMatchday: seasonSimulateNextMatchday,
+    simulateFullSeason: seasonSimulateFullSeason,
   }),
 });
 
