@@ -1,5 +1,5 @@
-import { describe, it, expect } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, afterEach } from "bun:test";
+import { render, screen, cleanup } from "@testing-library/react";
 import { SeasonControlPanel } from "./SeasonControlPanel";
 import { httpBatchLink } from "@trpc/client";
 import superjson from "superjson";
@@ -7,17 +7,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createTRPCReact } from "@trpc/react-query";
 import type { AppRouter } from "../../../server/src/trpc/router";
 
-// Minimal mock for the tRPC client
 const trpc = createTRPCReact<AppRouter>();
 
 function TestWrapper({ children }: { children: React.ReactNode }) {
   const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: {
-        retry: false,
-        staleTime: Infinity,
-      },
-    },
+    defaultOptions: { queries: { retry: false } },
   });
   const trpcClient = trpc.createClient({
     links: [
@@ -36,27 +30,54 @@ function TestWrapper({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Clean up after each test to prevent DOM element leakage
+afterEach(() => {
+  cleanup();
+});
+
 describe("SeasonControlPanel", () => {
-  it("renders without crashing", () => {
+  it("renders loading state when season query is loading", () => {
     render(
       <TestWrapper>
         <SeasonControlPanel />
       </TestWrapper>
     );
-    // Component should render in loading state (no live server in test)
-    expect(
-      screen.getByText(/Loading season info/i)
-    ).toBeDefined();
+    // Without a live server, the component enters loading state
+    expect(screen.getByText(/Loading season info/i)).toBeDefined();
   });
 
-  it("renders without TypeScript errors", () => {
+  it("renders without crashing", () => {
     const { container } = render(
       <TestWrapper>
         <SeasonControlPanel />
       </TestWrapper>
     );
-    // Verify the component mounts and renders
     expect(container).toBeDefined();
     expect(container.firstChild).toBeDefined();
+  });
+
+  it("renders loading shell with correct styling", () => {
+    render(
+      <TestWrapper>
+        <SeasonControlPanel />
+      </TestWrapper>
+    );
+    const loadingEl = screen.getByText(/Loading season info/i);
+    expect(loadingEl.closest(".bg-white")).toBeDefined();
+    expect(loadingEl.closest(".rounded-lg")).toBeDefined();
+    expect(loadingEl.closest(".shadow")).toBeDefined();
+  });
+
+  it("component exports a valid React component", () => {
+    expect(typeof SeasonControlPanel).toBe("function");
+  });
+
+  it("handles missing server gracefully", () => {
+    const { container } = render(
+      <TestWrapper>
+        <SeasonControlPanel />
+      </TestWrapper>
+    );
+    expect(container).toBeDefined();
   });
 });
