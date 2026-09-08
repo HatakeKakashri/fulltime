@@ -3,6 +3,7 @@ import { trpc } from "../trpc/client";
 
 export function HomePage() {
   const navigate = useNavigate();
+  const utils = trpc.useUtils();
 
   // Fetch all seasons
   const { data: seasonsData, isLoading: seasonsLoading } =
@@ -11,6 +12,21 @@ export function HomePage() {
   // Fetch health stats
   const { data: healthStats, isLoading: healthLoading } =
     trpc.season.healthStats.useQuery();
+
+  // Create season mutation
+  const createSeasonMutation = trpc.season.create.useMutation({
+    onSuccess: async (data) => {
+      // Invalidate queries to refresh the season list
+      await Promise.all([
+        utils.league.seasons.invalidate(),
+        utils.league.currentSeason.invalidate(),
+        utils.league.standings.invalidate(),
+        utils.league.fixtures.invalidate(),
+      ]);
+      // Navigate to the new season's league page
+      navigate(`/league/${data.seasonId}`);
+    },
+  });
 
   if (seasonsLoading || healthLoading) {
     return (
@@ -56,9 +72,21 @@ export function HomePage() {
             <span className="text-blue-600 text-sm font-medium">View League →</span>
           </div>
         ) : (
-          <div className="text-center py-8 text-slate-500">
-            <p>No active season</p>
-            <p className="text-sm mt-1">Create a season to get started</p>
+          <div className="text-center py-8">
+            <p className="text-slate-500 mb-4">No active season</p>
+            <button
+              type="button"
+              onClick={() => createSeasonMutation.mutate({})}
+              disabled={createSeasonMutation.isPending}
+              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {createSeasonMutation.isPending ? "Creating…" : "Create Season"}
+            </button>
+            {createSeasonMutation.error && (
+              <p className="text-sm text-red-500 mt-2">
+                {createSeasonMutation.error.message}
+              </p>
+            )}
           </div>
         )}
       </section>

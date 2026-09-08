@@ -15,6 +15,7 @@ The system SHALL display the current season being simulated, including the seaso
 #### Scenario: No current season
 - **WHEN** no season is currently being simulated
 - **THEN** the current season element indicates absence (empty/null state, not an error)
+- **AND** a "Create Season" button is displayed that allows the user to start a new season
 
 ### Requirement: Previous Seasons List
 

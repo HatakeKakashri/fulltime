@@ -39,3 +39,7 @@
 
 - [x] 7.1 End-to-end test: start season, simulate 3 matches for one team, verify rotation triggered — verify: starting XI after match 3 reflects rotation
 - [x] 7.2 Verify navigation flow: Home → League → Team → back to League → Home — verify: all routes work and maintain season scope
+
+## 8. Bug Fix: Create Season Button on Homepage
+
+- [x] 8.1 Add "Create Season" button to HomePage when no active season exists — verify: button triggers `season.create` mutation and navigates to new season
