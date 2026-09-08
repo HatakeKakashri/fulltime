@@ -56,4 +56,4 @@ Bun.serve({
   },
 });
 
-console.log(`🚀 Server listening on ${port}`);
+console.log(`🚀 Server listening on ${process.env.HOST || "0.0.0.0"}:${port}`);

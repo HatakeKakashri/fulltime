@@ -122,10 +122,12 @@ export function LeaguePage() {
 function CreateSeasonButton() {
   const utils = trpc.useUtils();
   const createMutation = trpc.season.create.useMutation({
-    onSuccess: () => {
-      utils.league.currentSeason.invalidate();
-      utils.league.standings.invalidate();
-      utils.league.fixtures.invalidate();
+    onSuccess: async () => {
+      await Promise.all([
+        utils.league.currentSeason.invalidate(),
+        utils.league.standings.invalidate(),
+        utils.league.fixtures.invalidate(),
+      ]);
     },
   });
 

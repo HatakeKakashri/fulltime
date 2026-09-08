@@ -230,17 +230,15 @@ export async function simulateNextMatchday(
     // Deduplicate club IDs — each club only needs one XI check per matchday
     const clubIds = [...new Set(fixtures.flatMap((f) => [f.homeClubId, f.awayClubId]))];
     for (const clubId of clubIds) {
-      await ensureStartingXI(clubId);
+      await ensureStartingXI(clubId, tx);
     }
 
     const results: MatchdayResult['results'] = [];
 
     // Sequential simulation — no parallelism
     for (const fixture of fixtures) {
-      // Simulate the match (uses module-level prisma; match record creation
-      // is committed independently — the tx.fixture.update below gates it
-      // inside the surrounding transaction)
-      const match = await simulateMatch(fixture.id);
+      // Simulate the match — Match creation is now inside the transaction via tx
+      const match = await simulateMatch(fixture.id, tx);
 
       // Link match to fixture
       await tx.fixture.update({
@@ -290,8 +288,8 @@ export async function simulateNextMatchday(
 /**
  * Ensure a club has a starting XI. Recalculate if missing.
  */
-async function ensureStartingXI(clubId: string): Promise<void> {
-  const xi = await prisma.startingXI.findUnique({
+async function ensureStartingXI(clubId: string, tx: any): Promise<void> {
+  const xi = await tx.startingXI.findUnique({
     where: { clubId },
     select: { id: true },
   });

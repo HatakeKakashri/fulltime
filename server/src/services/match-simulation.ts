@@ -136,9 +136,14 @@ function isGoalEvent(type: string, outcome: string): boolean {
 
 // ─── Main Simulation ─────────────────────────────────────────────────────────
 
-export async function simulateMatch(fixtureId: string): Promise<Match> {
+export async function simulateMatch(
+  fixtureId: string,
+  prismaClient?: typeof prisma
+): Promise<Match> {
+  const p = prismaClient ?? prisma;
+
   // 1. Load fixture
-  const fixture: Fixture = await prisma.fixture.findUniqueOrThrow({
+  const fixture: Fixture = await p.fixture.findUniqueOrThrow({
     where: { id: fixtureId },
     include: { matchday: true },
   });
@@ -163,8 +168,8 @@ export async function simulateMatch(fixtureId: string): Promise<Match> {
 
   // 3. Load all players for both clubs
   const [homePlayers, awayPlayers] = await Promise.all([
-    prisma.player.findMany({ where: { clubId: homeClubId } }),
-    prisma.player.findMany({ where: { clubId: awayClubId } }),
+    p.player.findMany({ where: { clubId: homeClubId } }),
+    p.player.findMany({ where: { clubId: awayClubId } }),
   ]);
 
   // 4. Build team snapshots
@@ -225,7 +230,7 @@ export async function simulateMatch(fixtureId: string): Promise<Match> {
   events.sort((a, b) => a.minute - b.minute);
 
   // 6. Create match record
-  const match = await prisma.match.create({
+  const match = await p.match.create({
     data: {
       fixtureId,
       homeScore,
