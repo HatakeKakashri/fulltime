@@ -3,7 +3,7 @@ import { publicProcedure } from "../init";
 import { seedSeason } from "../../services/seed";
 
 const InputSchema = z.object({
-  seed: z.number().int().min(0).optional().default(42),
+  seed: z.number().int().min(0).optional(),
 });
 
 const OutputSchema = z.object({
@@ -18,6 +18,8 @@ export const seasonCreate = publicProcedure
   .input(InputSchema)
   .output(OutputSchema)
   .mutation(async ({ input }) => {
-    const result = await seedSeason(input.seed);
+    // Generate a random seed if not provided
+    const seed = input.seed ?? Math.floor(Math.random() * 0xFFFFFFFF);
+    const result = await seedSeason(seed);
     return result;
   });

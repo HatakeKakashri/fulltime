@@ -1,6 +1,8 @@
 import { BrowserRouter, Link, NavLink, Route, Routes } from "react-router-dom";
 import { TRPCProvider } from "./trpc/provider";
+import { HomePage } from "./pages/HomePage";
 import { LeaguePage } from "./pages/LeaguePage";
+import { TeamPage } from "./pages/TeamPage";
 import { MatchDetailPage } from "./pages/MatchDetailPage";
 import { ClubSquadPage } from "./pages/ClubSquadPage";
 import { FixturesPage } from "./pages/FixturesPage";
@@ -33,7 +35,7 @@ function NotFound() {
       <span className="text-2xl font-bold text-slate-900">404</span>
       <span className="text-slate-500">Page not found</span>
       <Link to="/" className="text-blue-600 hover:underline text-sm">
-        Back to league standings
+        Back to home
       </Link>
     </div>
   );
@@ -52,13 +54,15 @@ export function App() {
               League Simulation MVP
             </span>
             <div className="ml-auto flex items-center gap-4">
-              <NavItem to="/" label="League" />
+              <NavItem to="/" label="Home" />
               <NavItem to="/fixtures" label="Fixtures" />
             </div>
           </nav>
           <main className="p-4">
             <Routes>
-              <Route path="/" element={<LeaguePage />} />
+              <Route path="/" element={<HomePage />} />
+              <Route path="/league/:seasonId" element={<LeaguePage />} />
+              <Route path="/team/:teamId" element={<TeamPage />} />
               <Route path="/fixtures" element={<FixturesPage />} />
               <Route path="/match/:matchId" element={<MatchDetailPage />} />
               <Route path="/club/:clubId" element={<ClubSquadPage />} />

@@ -1,0 +1,153 @@
+import { useParams, useNavigate } from "react-router-dom";
+import { trpc } from "../trpc/client";
+
+export function TeamPage() {
+  const { teamId } = useParams<{ teamId: string }>();
+  const navigate = useNavigate();
+
+  // Fetch team squad data
+  const { data, isLoading, error } = trpc.club.squad.useQuery(
+    { clubId: teamId ?? "" },
+    { enabled: !!teamId }
+  );
+
+  // Fetch starting XI for the team
+  const { data: startingXIData, isLoading: xiLoading } =
+    trpc.team.startingXI.useQuery(
+      { clubId: teamId ?? "" },
+      { enabled: !!teamId }
+    );
+
+  if (isLoading || xiLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <span className="text-slate-500">Loading team data…</span>
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-2">
+        <span className="text-red-500 font-medium">Team not found</span>
+        <span className="text-slate-500 text-sm">
+          This team may not exist or has not been initialized.
+        </span>
+      </div>
+    );
+  }
+
+  const { club, players, startingXI } = data;
+  const startingPlayers = startingXIData?.players ?? [];
+
+  return (
+    <div className="space-y-8">
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-2 text-sm text-slate-500">
+        <button
+          onClick={() => navigate("/")}
+          className="hover:text-slate-700 transition-colors"
+        >
+          Home
+        </button>
+        <span>›</span>
+        <button
+          onClick={() => navigate(-1)}
+          className="hover:text-slate-700 transition-colors"
+        >
+          League
+        </button>
+        <span>›</span>
+        <span className="text-slate-900 font-medium">{club.name}</span>
+      </div>
+
+      {/* Club Header */}
+      <section>
+        <h1 className="text-2xl font-bold text-slate-900">{club.name}</h1>
+        <p className="text-slate-500 text-sm mt-1">
+          Squad of {players.length} players · Starting XI formation:{" "}
+          {startingXI.formation.totalSlots}-slot
+        </p>
+      </section>
+
+      {/* Starting XI */}
+      <section>
+        <h2 className="text-lg font-semibold mb-3 text-slate-800">
+          Starting XI
+        </h2>
+        <div className="bg-white rounded-lg shadow p-4">
+          {/* Formation display — one card per starting player */}
+          <div className="grid grid-cols-4 gap-2 text-sm text-center">
+            {startingPlayers.map((player) => (
+              <div
+                key={player.id}
+                className="bg-slate-100 rounded p-2 text-slate-700 font-medium"
+              >
+                <div className="text-xs text-slate-500 mb-0.5">
+                  {player.positionGroup}
+                </div>
+                <div className="truncate">{player.name}</div>
+                <div className="text-xs text-slate-400">
+                  {player.overallRating}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Full Roster */}
+      <section>
+        <h2 className="text-lg font-semibold mb-3 text-slate-800">
+          Full Roster
+        </h2>
+        <div className="overflow-x-auto rounded-lg shadow">
+          <table className="w-full text-sm bg-white">
+            <thead className="bg-slate-900 text-white">
+              <tr>
+                <th className="px-3 py-2 text-left">Name</th>
+                <th className="px-3 py-2 text-center">Position</th>
+                <th className="px-3 py-2 text-center">Rating</th>
+                <th className="px-3 py-2 text-center">ATT</th>
+                <th className="px-3 py-2 text-center">DEF</th>
+                <th className="px-3 py-2 text-center">PAS</th>
+                <th className="px-3 py-2 text-center">PHY</th>
+                <th className="px-3 py-2 text-center">GKP</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {players.map((player) => (
+                <tr key={player.id} className="hover:bg-slate-50">
+                  <td className="px-3 py-2 font-medium text-slate-900">
+                    {player.name}
+                  </td>
+                  <td className="px-3 py-2 text-center text-slate-600">
+                    {player.positionGroup}
+                  </td>
+                  <td className="px-3 py-2 text-center font-medium text-slate-800">
+                    {player.overallRating}
+                  </td>
+                  <td className="px-3 py-2 text-center text-slate-600">
+                    {player.attack}
+                  </td>
+                  <td className="px-3 py-2 text-center text-slate-600">
+                    {player.defense}
+                  </td>
+                  <td className="px-3 py-2 text-center text-slate-600">
+                    {player.passing}
+                  </td>
+                  <td className="px-3 py-2 text-center text-slate-600">
+                    {player.physical}
+                  </td>
+                  <td className="px-3 py-2 text-center text-slate-600">
+                    {player.goalkeeping}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
+}

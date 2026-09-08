@@ -1,6 +1,7 @@
 import { prisma } from '../db';
 import { simulateMatch } from './match-simulation';
 import { recalculateStartingXI } from './starting-xi';
+import { evaluateAndRotateXI } from './starting-xi-rotation';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -257,6 +258,11 @@ export async function simulateNextMatchday(
         awayScore: match.awayScore,
         matchId: match.id,
       });
+
+      // Check if rotation should trigger for either club
+      // Rotation triggers after every 3 completed matches per club
+      await checkAndTriggerRotation(fixture.homeClubId, seasonId);
+      await checkAndTriggerRotation(fixture.awayClubId, seasonId);
     }
 
     // Mark matchday as simulated
@@ -296,6 +302,31 @@ async function ensureStartingXI(clubId: string, tx: any): Promise<void> {
 
   if (!xi) {
     await recalculateStartingXI(clubId);
+  }
+}
+
+/**
+ * Check if rotation should trigger for a club and execute if needed.
+ * Rotation triggers after every 3 completed matches per club.
+ */
+async function checkAndTriggerRotation(
+  clubId: string,
+  seasonId: string
+): Promise<void> {
+  // Count completed matches for this club in this season
+  const completedMatches = await prisma.match.count({
+    where: {
+      status: "COMPLETED",
+      fixture: {
+        matchday: { seasonId },
+        OR: [{ homeClubId: clubId }, { awayClubId: clubId }],
+      },
+    },
+  });
+
+  // Trigger rotation if match count is divisible by 3 and at least 3 matches
+  if (completedMatches >= 3 && completedMatches % 3 === 0) {
+    await evaluateAndRotateXI(clubId, seasonId);
   }
 }
 

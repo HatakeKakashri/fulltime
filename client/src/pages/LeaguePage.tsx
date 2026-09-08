@@ -1,23 +1,29 @@
-import { useNavigate } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { skipToken } from "@tanstack/react-query";
 import { trpc } from "../trpc/client";
 import { SeasonControlPanel } from "../components/SeasonControlPanel";
 
 export function LeaguePage() {
+  const { seasonId } = useParams<{ seasonId: string }>();
   const navigate = useNavigate();
 
-  // Discover the current season first
+  // Fetch season details
   const { data: season, isLoading: seasonLoading, isError: seasonError } =
     trpc.league.currentSeason.useQuery();
 
-  // Then fetch standings for that season — skipToken prevents query from firing
-  // until we have a valid season ID (no fake input needed)
+  // Fetch standings for this season
   const { data: standings, isLoading: standingsLoading } =
     trpc.league.standings.useQuery(
-      season ? { seasonId: season.id } : skipToken
+      seasonId ? { seasonId } : skipToken
     );
 
-  if (seasonLoading) {
+  // Fetch fixtures for this season
+  const { data: fixturesData, isLoading: fixturesLoading } =
+    trpc.league.fixtures.useQuery(
+      seasonId ? { seasonId } : skipToken
+    );
+
+  if (seasonLoading || fixturesLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <span className="text-slate-500">Loading league data…</span>
@@ -25,22 +31,22 @@ export function LeaguePage() {
     );
   }
 
-  if (!season) {
-    if (seasonError) {
-      return (
-        <div className="flex flex-col items-center justify-center h-64 gap-2">
-          <span className="text-red-500 font-medium">Unable to connect to server</span>
-          <span className="text-slate-500 text-sm">
-            Make sure the server is running on port 3000.
-          </span>
-        </div>
-      );
-    }
+  if (!seasonId) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-2">
-        <span className="text-slate-500 font-medium">No season found</span>
-        <p className="text-slate-500 text-sm">Create a season to get started.</p>
-        <CreateSeasonButton />
+        <span className="text-slate-500 font-medium">No season selected</span>
+        <p className="text-slate-500 text-sm">Select a season from the home page.</p>
+      </div>
+    );
+  }
+
+  if (seasonError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-2">
+        <span className="text-red-500 font-medium">Unable to connect to server</span>
+        <span className="text-slate-500 text-sm">
+          Make sure the server is running on port 3000.
+        </span>
       </div>
     );
   }
@@ -54,11 +60,26 @@ export function LeaguePage() {
   }
 
   const clubs = standings?.rows ?? [];
+  const fixtures = fixturesData?.fixtures ?? [];
+  const upcomingFixtures = fixtures.filter((f) => f.status === "PENDING");
+  const completedFixtures = fixtures.filter((f) => f.status === "SIMULATED");
 
   return (
     <div className="space-y-8">
-      {/* Season Control Panel — hidden when season is COMPLETED */}
-      <SeasonControlPanel />
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-2 text-sm text-slate-500">
+        <button
+          onClick={() => navigate("/")}
+          className="hover:text-slate-700 transition-colors"
+        >
+          Home
+        </button>
+        <span>›</span>
+        <span className="text-slate-900 font-medium">League</span>
+      </div>
+
+      {/* Season Control Panel */}
+      <SeasonControlPanel seasonId={seasonId} />
 
       {/* League Standings */}
       <section>
@@ -86,7 +107,7 @@ export function LeaguePage() {
                 <tr
                   key={row.clubId}
                   className="hover:bg-slate-50 cursor-pointer"
-                  onClick={() => navigate(`/club/${row.clubId}`)}
+                  onClick={() => navigate(`/team/${row.clubId}`)}
                 >
                   <td className="px-3 py-2">{row.position}</td>
                   <td className="px-3 py-2 font-medium text-slate-900">
@@ -115,30 +136,182 @@ export function LeaguePage() {
           </table>
         </div>
       </section>
+
+      {/* Fixtures Two-Pane Block */}
+      <section>
+        <h2 className="text-xl font-bold mb-4 text-slate-900">Fixtures</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Left Pane: Upcoming/Current Fixtures */}
+          <div className="bg-white rounded-lg shadow p-4">
+            <h3 className="text-lg font-semibold text-slate-900 mb-3">
+              Upcoming Fixtures
+            </h3>
+            {upcomingFixtures.length > 0 ? (
+              <div className="space-y-2">
+                {upcomingFixtures.slice(0, 10).map((fixture) => (
+                  <div
+                    key={fixture.id}
+                    className="flex items-center justify-between p-2 bg-slate-50 rounded"
+                  >
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-slate-900">
+                        {fixture.homeClubName}
+                      </span>
+                      <span className="text-slate-400 mx-2">vs</span>
+                      <span className="text-sm font-medium text-slate-900">
+                        {fixture.awayClubName}
+                      </span>
+                    </div>
+                    <span className="text-xs text-slate-500">
+                      MD {fixture.matchdayIndex}
+                    </span>
+                  </div>
+                ))}
+                {upcomingFixtures.length > 10 && (
+                  <p className="text-xs text-slate-500 text-center">
+                    +{upcomingFixtures.length - 10} more fixtures
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500 text-center py-4">
+                No upcoming fixtures
+              </p>
+            )}
+          </div>
+
+          {/* Right Pane: Completed Fixtures */}
+          <div className="bg-white rounded-lg shadow p-4">
+            <h3 className="text-lg font-semibold text-slate-900 mb-3">
+              Completed Fixtures
+            </h3>
+            {completedFixtures.length > 0 ? (
+              <div className="space-y-2">
+                {completedFixtures.slice(0, 10).map((fixture) => (
+                  <div
+                    key={fixture.id}
+                    className="flex items-center justify-between p-2 bg-slate-50 rounded"
+                  >
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-slate-900">
+                        {fixture.homeClubName}
+                      </span>
+                      <span className="text-slate-400 mx-2">vs</span>
+                      <span className="text-sm font-medium text-slate-900">
+                        {fixture.awayClubName}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-sm font-bold text-slate-900">
+                        {fixture.homeScore} - {fixture.awayScore}
+                      </span>
+                      <span className="text-xs text-slate-500 ml-2">
+                        MD {fixture.matchdayIndex}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+                {completedFixtures.length > 10 && (
+                  <p className="text-xs text-slate-500 text-center">
+                    +{completedFixtures.length - 10} more fixtures
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500 text-center py-4">
+                No completed fixtures yet
+              </p>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* Season Stats */}
+      <section>
+        <h2 className="text-xl font-bold mb-4 text-slate-900">Season Stats</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <SeasonStatCard
+            title="Top Scorers"
+            category="goals"
+            seasonId={seasonId}
+          />
+          <SeasonStatCard
+            title="Top Assists"
+            category="assists"
+            seasonId={seasonId}
+          />
+          <SeasonStatCard
+            title="Total Passes"
+            category="passes"
+            seasonId={seasonId}
+          />
+          <SeasonStatCard
+            title="Clean Sheets"
+            category="cleanSheets"
+            seasonId={seasonId}
+          />
+          <SeasonStatCard
+            title="Top Rated"
+            category="overall"
+            seasonId={seasonId}
+          />
+        </div>
+      </section>
     </div>
   );
 }
 
-function CreateSeasonButton() {
-  const utils = trpc.useUtils();
-  const createMutation = trpc.season.create.useMutation({
-    onSuccess: async () => {
-      await Promise.all([
-        utils.league.currentSeason.invalidate(),
-        utils.league.standings.invalidate(),
-        utils.league.fixtures.invalidate(),
-      ]);
-    },
+function SeasonStatCard({
+  title,
+  category,
+  seasonId,
+}: {
+  title: string;
+  category: "goals" | "assists" | "passes" | "cleanSheets" | "overall";
+  seasonId: string;
+}) {
+  const { data, isLoading } = trpc.league.seasonStats.useQuery({
+    seasonId,
+    category,
   });
 
+  if (isLoading) {
+    return (
+      <div className="bg-white rounded-lg shadow p-4">
+        <h3 className="text-lg font-semibold text-slate-900 mb-3">{title}</h3>
+        <div className="text-sm text-slate-500">Loading…</div>
+      </div>
+    );
+  }
+
+  const stats = data?.stats ?? [];
+
   return (
-    <button
-      type="button"
-      onClick={() => createMutation.mutate({})}
-      disabled={createMutation.isPending}
-      className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-    >
-      {createMutation.isPending ? "Creating…" : "Create Season"}
-    </button>
+    <div className="bg-white rounded-lg shadow p-4">
+      <h3 className="text-lg font-semibold text-slate-900 mb-3">{title}</h3>
+      {stats.length > 0 ? (
+        <div className="space-y-1">
+          {stats.map((stat, index) => (
+            <div
+              key={stat.playerId}
+              className="flex items-center justify-between py-1 text-sm"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-slate-400 w-5">{index + 1}.</span>
+                <span className="text-slate-900">{stat.playerName}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500 text-xs">{stat.clubName}</span>
+                <span className="font-medium text-slate-900">{stat.value}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-slate-500 text-center py-4">
+          No data available
+        </p>
+      )}
+    </div>
   );
 }

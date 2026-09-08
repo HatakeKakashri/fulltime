@@ -3,6 +3,10 @@ import { z } from "zod";
 import { leagueStandings } from "./procedures/league-standings";
 import { leagueFixtures } from "./procedures/league-fixtures";
 import { leagueCurrentSeason } from "./procedures/league-current-season";
+import { leagueSeasons } from "./procedures/league-seasons";
+import { leagueSeasonStats } from "./procedures/league-season-stats";
+import { teamStartingXI } from "./procedures/team-starting-xi";
+import { seasonHealthStats } from "./procedures/season-health-stats";
 import { matchResult } from "./procedures/match-result";
 import { clubSquad } from "./procedures/club-squad";
 import {
@@ -24,6 +28,11 @@ export const appRouter = router({
     standings: leagueStandings,
     fixtures: leagueFixtures,
     currentSeason: leagueCurrentSeason,
+    seasons: leagueSeasons,
+    seasonStats: leagueSeasonStats,
+  }),
+  team: router({
+    startingXI: teamStartingXI,
   }),
   match: router({
     result: matchResult,
@@ -35,6 +44,7 @@ export const appRouter = router({
     create: seasonCreate,
     simulateNextMatchday: seasonSimulateNextMatchday,
     simulateFullSeason: seasonSimulateFullSeason,
+    healthStats: seasonHealthStats,
   }),
 });
 

@@ -11,22 +11,21 @@ interface ValidationReport {
   errors: string[];
 }
 
-export function SeasonControlPanel() {
+interface SeasonControlPanelProps {
+  seasonId: string;
+}
+
+export function SeasonControlPanel({ seasonId }: SeasonControlPanelProps) {
   const [lastValidation, setLastValidation] = useState<ValidationReport[] | null>(
     null
   );
-
-  const { data: season, isLoading: seasonLoading } =
-    trpc.league.currentSeason.useQuery();
 
   const utils = trpc.useUtils();
 
   const simulateNextMutation = trpc.season.simulateNextMatchday.useMutation({
     onSuccess: async (data) => {
       setLastValidation([data.validationReport]);
-      // Invalidate all queries affected by simulation — await to ensure
-      // React Query marks them stale and triggers refetch before the
-      // component re-renders.
+      // Invalidate all queries affected by simulation
       await Promise.all([
         utils.league.currentSeason.invalidate(),
         utils.league.standings.invalidate(),
@@ -38,9 +37,7 @@ export function SeasonControlPanel() {
   const simulateFullMutation = trpc.season.simulateFullSeason.useMutation({
     onSuccess: async (data) => {
       setLastValidation(data.validationReport);
-      // Invalidate all queries affected by simulation — await to ensure
-      // React Query marks them stale and triggers refetch before the
-      // component re-renders.
+      // Invalidate all queries affected by simulation
       await Promise.all([
         utils.league.currentSeason.invalidate(),
         utils.league.standings.invalidate(),
@@ -49,45 +46,41 @@ export function SeasonControlPanel() {
     },
   });
 
-  if (seasonLoading) {
-    return (
-      <div className="bg-white rounded-lg shadow p-4">
-        <span className="text-slate-500">Loading season info…</span>
-      </div>
-    );
-  }
-
-  if (!season) {
-    return null;
-  }
-
-  // Hidden when season is COMPLETED
-  if (season.status === "COMPLETED") {
-    return null;
-  }
+  const createMutation = trpc.season.create.useMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        utils.league.currentSeason.invalidate(),
+        utils.league.standings.invalidate(),
+        utils.league.fixtures.invalidate(),
+        utils.league.seasons.invalidate(),
+      ]);
+    },
+  });
 
   const isPending =
-    simulateNextMutation.isPending || simulateFullMutation.isPending;
+    simulateNextMutation.isPending ||
+    simulateFullMutation.isPending ||
+    createMutation.isPending;
 
   return (
     <div className="bg-white rounded-lg shadow p-4 space-y-4">
       <h2 className="text-lg font-semibold text-slate-900">Season Control</h2>
 
-      {/* Status display */}
-      <div className="text-sm text-slate-600">
-        <span className="font-medium">Status:</span>{" "}
-        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-          {season.status}
-        </span>
-      </div>
-
       {/* Action buttons */}
       <div className="flex gap-3">
         <button
           type="button"
-          onClick={() => simulateNextMutation.mutate()}
+          onClick={() => createMutation.mutate({})}
           disabled={isPending}
           className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {createMutation.isPending ? "Starting…" : "Start Season"}
+        </button>
+        <button
+          type="button"
+          onClick={() => simulateNextMutation.mutate()}
+          disabled={isPending}
+          className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-md hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {simulateNextMutation.isPending
             ? "Simulating…"
@@ -101,7 +94,7 @@ export function SeasonControlPanel() {
             }
           }}
           disabled={isPending}
-          className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-md hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="px-4 py-2 bg-amber-600 text-white text-sm font-medium rounded-md hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {simulateFullMutation.isPending
             ? "Simulating…"
@@ -110,10 +103,11 @@ export function SeasonControlPanel() {
       </div>
 
       {/* Error display */}
-      {(simulateNextMutation.error || simulateFullMutation.error) && (
+      {(simulateNextMutation.error || simulateFullMutation.error || createMutation.error) && (
         <div role="alert" className="text-sm text-red-600 bg-red-50 rounded-md p-2">
           {simulateNextMutation.error?.message ||
-            simulateFullMutation.error?.message}
+            simulateFullMutation.error?.message ||
+            createMutation.error?.message}
         </div>
       )}
 
@@ -130,7 +124,7 @@ export function SeasonControlPanel() {
       {simulateFullMutation.data && (
         <div className="text-sm text-slate-600">
           <span className="font-medium">Season complete!</span>{" "}
-          {simulateFullMutation.data.totalMatchdays} matchdays, {" "}
+          {simulateFullMutation.data.totalMatchdays} matchdays,{" "}
           {simulateFullMutation.data.totalFixtures} fixtures simulated
         </div>
       )}
