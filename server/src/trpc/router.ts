@@ -9,6 +9,7 @@ import {
   seasonSimulateNextMatchday,
   seasonSimulateFullSeason,
 } from "./procedures/season-simulate";
+import { seasonCreate } from "./procedures/season-create";
 import { router } from "./init";
 
 /**
@@ -31,6 +32,7 @@ export const appRouter = router({
     squad: clubSquad,
   }),
   season: router({
+    create: seasonCreate,
     simulateNextMatchday: seasonSimulateNextMatchday,
     simulateFullSeason: seasonSimulateFullSeason,
   }),

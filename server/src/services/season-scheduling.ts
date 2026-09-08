@@ -181,106 +181,110 @@ function hashSeed(
 export async function simulateNextMatchday(
   seasonId: string
 ): Promise<MatchdayResult | null> {
-  // Find next pending matchday
-  const matchday = await prisma.matchday.findFirst({
-    where: {
-      seasonId,
-      status: 'PENDING',
-    },
-    orderBy: { index: 'asc' },
-  });
-
-  if (!matchday) {
-    return null; // No pending matchdays
-  }
-
-  // Transition season to IN_PROGRESS on first simulation
-  const season = await prisma.season.findUnique({ where: { id: seasonId } });
-  if (season && season.status === 'INITIALIZED') {
-    await prisma.season.update({
-      where: { id: seasonId },
-      data: { status: 'IN_PROGRESS' },
+  return prisma.$transaction(async (tx) => {
+    // Find next pending matchday
+    const matchday = await tx.matchday.findFirst({
+      where: {
+        seasonId,
+        status: 'PENDING',
+      },
+      orderBy: { index: 'asc' },
     });
-  }
 
-  // Load all pending fixtures for this matchday
-  const fixtures = await prisma.fixture.findMany({
-    where: {
-      matchdayId: matchday.id,
-      status: 'PENDING',
-    },
-    orderBy: { id: 'asc' },
-  });
+    if (!matchday) {
+      return null; // No pending matchdays
+    }
 
-  if (fixtures.length === 0) {
-    // No pending fixtures — mark matchday as simulated
-    await prisma.matchday.update({
+    // Transition season to IN_PROGRESS on first simulation
+    const season = await tx.season.findUnique({ where: { id: seasonId } });
+    if (season && season.status === 'INITIALIZED') {
+      await tx.season.update({
+        where: { id: seasonId },
+        data: { status: 'IN_PROGRESS' },
+      });
+    }
+
+    // Load all pending fixtures for this matchday
+    const fixtures = await tx.fixture.findMany({
+      where: {
+        matchdayId: matchday.id,
+        status: 'PENDING',
+      },
+      orderBy: { id: 'asc' },
+    });
+
+    if (fixtures.length === 0) {
+      // No pending fixtures — mark matchday as simulated
+      await tx.matchday.update({
+        where: { id: matchday.id },
+        data: { status: 'SIMULATED' },
+      });
+      return {
+        matchdayId: matchday.id,
+        index: matchday.index,
+        fixtureCount: 0,
+        results: [],
+      };
+    }
+
+    // Deduplicate club IDs — each club only needs one XI check per matchday
+    const clubIds = [...new Set(fixtures.flatMap((f) => [f.homeClubId, f.awayClubId]))];
+    for (const clubId of clubIds) {
+      await ensureStartingXI(clubId);
+    }
+
+    const results: MatchdayResult['results'] = [];
+
+    // Sequential simulation — no parallelism
+    for (const fixture of fixtures) {
+      // Simulate the match (uses module-level prisma; match record creation
+      // is committed independently — the tx.fixture.update below gates it
+      // inside the surrounding transaction)
+      const match = await simulateMatch(fixture.id);
+
+      // Link match to fixture
+      await tx.fixture.update({
+        where: { id: fixture.id },
+        data: {
+          status: 'SIMULATED',
+          matchId: match.id,
+        },
+      });
+
+      results.push({
+        fixtureId: fixture.id,
+        homeClubId: fixture.homeClubId,
+        awayClubId: fixture.awayClubId,
+        homeScore: match.homeScore,
+        awayScore: match.awayScore,
+        matchId: match.id,
+      });
+    }
+
+    // Mark matchday as simulated
+    await tx.matchday.update({
       where: { id: matchday.id },
       data: { status: 'SIMULATED' },
     });
+
+    // Check if this was the last matchday — transition season to COMPLETED
+    const remaining = await tx.matchday.count({
+      where: { seasonId, status: 'PENDING' },
+    });
+    if (remaining === 0) {
+      await tx.season.update({
+        where: { id: seasonId },
+        data: { status: 'COMPLETED' },
+      });
+    }
+
     return {
       matchdayId: matchday.id,
       index: matchday.index,
-      fixtureCount: 0,
-      results: [],
+      fixtureCount: results.length,
+      results,
     };
-  }
-
-  // Deduplicate club IDs — each club only needs one XI check per matchday
-  const clubIds = [...new Set(fixtures.flatMap((f) => [f.homeClubId, f.awayClubId]))];
-  for (const clubId of clubIds) {
-    await ensureStartingXI(clubId);
-  }
-
-  const results: MatchdayResult['results'] = [];
-
-  // Sequential simulation — no parallelism
-  for (const fixture of fixtures) {
-    // Simulate the match
-    const match = await simulateMatch(fixture.id);
-
-    // Link match to fixture
-    await prisma.fixture.update({
-      where: { id: fixture.id },
-      data: {
-        status: 'SIMULATED',
-        matchId: match.id,
-      },
-    });
-
-    results.push({
-      fixtureId: fixture.id,
-      homeClubId: fixture.homeClubId,
-      awayClubId: fixture.awayClubId,
-      homeScore: match.homeScore,
-      awayScore: match.awayScore,
-      matchId: match.id,
-    });
-  }
-
-  // Mark matchday as simulated
-  await prisma.matchday.update({
-    where: { id: matchday.id },
-    data: { status: 'SIMULATED' },
   });
-
-  // Check if this was the last matchday — transition season to COMPLETED
-  const remaining = await prisma.matchday.count({
-    where: { seasonId, status: 'PENDING' },
-  });
-  if (remaining === 0) {
-    await prisma.season.update({
-      where: { id: seasonId },
-      data: { status: 'COMPLETED' },
-    });
-  }
-
-  return {
-    matchdayId: matchday.id,
-    index: matchday.index,
-    fixtureCount: results.length,
-    results,
-  };
 }
 
 /**

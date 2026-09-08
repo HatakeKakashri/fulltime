@@ -1,5 +1,8 @@
+import { z } from "zod";
 import { prisma } from "../db";
 import { MVP_FORMATION } from "../lib/constants/formation";
+
+const PlayerIdsSchema = z.array(z.string().uuid()).length(11);
 
 /**
  * Select the best starting XI for a club based on MVP_FORMATION slots.
@@ -58,6 +61,7 @@ export async function saveStartingXI(
   clubId: string,
   playerIds: string[]
 ): Promise<void> {
+  PlayerIdsSchema.parse(playerIds);
   await prisma.startingXI.upsert({
     where: { clubId },
     update: {

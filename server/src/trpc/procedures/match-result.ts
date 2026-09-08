@@ -28,6 +28,7 @@ const MatchEventSchema = z.object({
   teamId: z.string(),
   playerId: z.string(),
   outcome: z.string(),
+  playerName: z.string().optional(),
 });
 
 const StatsSchema = z.object({
@@ -149,6 +150,20 @@ export const matchResult = publicProcedure
       // Defensive — corrupt event log JSON returns an empty array.
       eventLog = [];
     }
+
+    // Resolve player names for event log
+    const playerIds = [...new Set(eventLog.map((e) => e.playerId))];
+    const players = playerIds.length > 0
+      ? await ctx.prisma.player.findMany({
+          where: { id: { in: playerIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const playerNameMap = new Map(players.map((p) => [p.id, p.name]));
+    eventLog = eventLog.map((e) => ({
+      ...e,
+      playerName: playerNameMap.get(e.playerId) ?? e.playerId,
+    }));
 
     const stats = computeMatchStats(
       eventLog,

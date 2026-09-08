@@ -146,7 +146,7 @@ const OutputSchema = z.object({
 const FullSeasonOutputSchema = z.object({
   totalMatchdays: z.number(),
   totalFixtures: z.number(),
-  finalSeasonStatus: z.enum(["COMPLETED"]),
+  finalSeasonStatus: z.enum(["INITIALIZED", "IN_PROGRESS", "COMPLETED"]),
   validationReport: z.array(ValidationReportSchema),
 });
 
@@ -253,7 +253,7 @@ export const seasonSimulateFullSeason = publicProcedure
     return {
       totalMatchdays,
       totalFixtures,
-      finalSeasonStatus: finalStatus as "COMPLETED",
+      finalSeasonStatus: finalStatus as "INITIALIZED" | "IN_PROGRESS" | "COMPLETED",
       validationReport: validationReports,
     };
   });

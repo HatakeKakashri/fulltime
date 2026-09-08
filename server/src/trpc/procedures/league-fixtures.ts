@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { publicProcedure } from "../init";
+import { MATCHDAYS_PER_SEASON } from "../../config/league";
 
 /**
  * `league.fixtures` — full fixture list for a season, optionally filtered
@@ -16,7 +17,7 @@ import { publicProcedure } from "../init";
  */
 const InputSchema = z.object({
   seasonId: z.string().uuid(),
-  matchdayIndex: z.number().int().min(1).max(38).optional(),
+  matchdayIndex: z.number().int().min(1).max(MATCHDAYS_PER_SEASON).optional(),
 });
 
 const FixtureViewSchema = z.object({
@@ -28,6 +29,8 @@ const FixtureViewSchema = z.object({
   awayClubName: z.string(),
   status: z.string(),
   matchId: z.string().nullable().optional(),
+  homeScore: z.number().nullable().optional(),
+  awayScore: z.number().nullable().optional(),
 });
 
 const OutputSchema = z.object({
@@ -73,6 +76,7 @@ export const leagueFixtures = publicProcedure
         matchday: { select: { index: true } },
         homeClub: { select: { id: true, name: true } },
         awayClub: { select: { id: true, name: true } },
+        match: { select: { homeScore: true, awayScore: true } },
       },
       orderBy: [{ matchday: { index: "asc" } }, { id: "asc" }],
     });
@@ -87,6 +91,8 @@ export const leagueFixtures = publicProcedure
         awayClubName: f.awayClub.name,
         status: f.status,
         matchId: f.matchId,
+        homeScore: f.match?.homeScore ?? null,
+        awayScore: f.match?.awayScore ?? null,
       })),
     };
   });

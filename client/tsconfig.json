@@ -4,7 +4,9 @@
     "jsx": "react-jsx",
     "moduleResolution": "bundler",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
-    "types": ["bun-types", "vite/client"]
+    "types": ["bun-types", "vite/client"],
+    "noUncheckedIndexedAccess": false
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["../server/**", "../node_modules/**"]
 }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LEAGUE_SIZE, MATCHDAYS_PER_SEASON } from "../config/league";
 
 /**
  * Pure derivation: take the simulation's `Match` rows + `Club` rows and
@@ -33,17 +34,17 @@ export interface ClubLike {
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
 export const StandingsRowSchema = z.object({
-  position: z.number().int().min(1).max(20),
+  position: z.number().int().min(1).max(LEAGUE_SIZE),
   clubId: z.string(),
   clubName: z.string(),
-  played: z.number().int().min(0).max(38),
-  won: z.number().int().min(0).max(38),
-  drawn: z.number().int().min(0).max(38),
-  lost: z.number().int().min(0).max(38),
+  played: z.number().int().min(0).max(MATCHDAYS_PER_SEASON),
+  won: z.number().int().min(0).max(MATCHDAYS_PER_SEASON),
+  drawn: z.number().int().min(0).max(MATCHDAYS_PER_SEASON),
+  lost: z.number().int().min(0).max(MATCHDAYS_PER_SEASON),
   goalsFor: z.number().int().min(0),
   goalsAgainst: z.number().int().min(0),
   goalDifference: z.number().int(),
-  points: z.number().int().min(0).max(114), // 38 * 3 = 114 max
+  points: z.number().int().min(0).max(MATCHDAYS_PER_SEASON * 3), // max wins across a full season
 });
 
 export type StandingsRow = z.infer<typeof StandingsRowSchema>;

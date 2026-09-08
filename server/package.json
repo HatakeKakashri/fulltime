@@ -5,7 +5,8 @@
   "scripts": {
     "seed": "bun run src/seed.ts",
     "dev": "bun run src/index.ts",
-    "server": "bun src/index.ts"
+    "server": "bun src/index.ts",
+    "test": "bun test"
   },
   "devDependencies": {
     "@types/bun": "^1.4.0",

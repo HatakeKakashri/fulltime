@@ -7,47 +7,74 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum SeasonStatus {
+  INITIALIZED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum MatchdayStatus {
+  PENDING
+  SIMULATED
+}
+
+enum FixtureStatus {
+  PENDING
+  SIMULATED
+}
+
+enum MatchStatus {
+  COMPLETED
+}
+
 model Season {
-  id          String      @id @default(uuid())
+  id          String        @id @default(uuid())
   startDate   DateTime
-  status      String      @default("INITIALIZED") // INITIALIZED, IN_PROGRESS, COMPLETED
-  createdAt   DateTime    @default(now())
+  status      SeasonStatus  @default(INITIALIZED)
+  createdAt   DateTime      @default(now())
   matchdays   Matchday[]
   clubs       Club[]
 }
 
 model Matchday {
-  id        String    @id @default(uuid())
+  id        String           @id @default(uuid())
   seasonId  String
-  index     Int       // 1-38
-  status    String    @default("PENDING") // PENDING, SIMULATED
-  season    Season    @relation(fields: [seasonId], references: [id])
+  index     Int              // 1-38
+  status    MatchdayStatus   @default(PENDING)
+  season    Season           @relation(fields: [seasonId], references: [id])
   fixtures  Fixture[]
+
+  @@unique([seasonId, index])
+  @@index([seasonId])
 }
 
 model Fixture {
-  id          String    @id @default(uuid())
+  id          String         @id @default(uuid())
   matchdayId  String
   homeClubId  String
   awayClubId  String
-  status      String    @default("PENDING") // PENDING, SIMULATED
-  seed        Int?      // PRNG seed for deterministic simulation
-  matchId     String?   // populated after simulation
-  matchday    Matchday  @relation(fields: [matchdayId], references: [id])
-  homeClub    Club      @relation("HomeFixtures", fields: [homeClubId], references: [id])
-  awayClub    Club      @relation("AwayFixtures", fields: [awayClubId], references: [id])
+  status      FixtureStatus  @default(PENDING)
+  seed        Int            // PRNG seed for deterministic simulation
+  matchId     String?        // populated after simulation
+  matchday    Matchday       @relation(fields: [matchdayId], references: [id])
+  homeClub    Club           @relation("HomeFixtures", fields: [homeClubId], references: [id])
+  awayClub    Club           @relation("AwayFixtures", fields: [awayClubId], references: [id])
   match       Match?
+
+  @@index([matchdayId])
+  @@index([homeClubId])
+  @@index([awayClubId])
 }
 
 model Match {
-  id            String    @id @default(uuid())
-  fixtureId     String    @unique
+  id            String      @id @default(uuid())
+  fixtureId     String      @unique
   homeScore     Int
   awayScore     Int
-  eventLogJson  String    // JSON string of MatchEvent[]
-  status        String    @default("COMPLETED")
-  simulatedAt   DateTime  @default(now())
-  fixture       Fixture   @relation(fields: [fixtureId], references: [id])
+  eventLogJson  String      // JSON string of MatchEvent[]
+  status        MatchStatus @default(COMPLETED)
+  simulatedAt   DateTime    @default(now())
+  fixture       Fixture     @relation(fields: [fixtureId], references: [id])
 }
 
 model Club {
@@ -59,6 +86,8 @@ model Club {
   startingXI    StartingXI?
   homeFixtures  Fixture[]       @relation("HomeFixtures")
   awayFixtures  Fixture[]       @relation("AwayFixtures")
+
+  @@index([seasonId])
 }
 
 model StartingXI {
@@ -81,5 +110,7 @@ model Player {
   goalkeeping             Int
   overallRating           Float
   club                    Club    @relation(fields: [clubId], references: [id])
+
+  @@index([clubId])
 }
 

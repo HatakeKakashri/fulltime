@@ -2,11 +2,12 @@ import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { appRouter } from "./trpc/router";
 import { createContext } from "./trpc/context";
 
-// CORS — dynamic Origin so LAN/mobile IP access works alongside localhost.
-// Strips credentials in production; permissive for local dev.
+// CORS — reflects incoming Origin. Vary: Origin prevents shared-cache poisoning.
 const CORS_BASE = {
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Vary": "Origin",
+  "Access-Control-Max-Age": "86400",
 };
 
 function corsHeaders(origin: string | null) {
@@ -16,7 +17,7 @@ function corsHeaders(origin: string | null) {
   };
 }
 
-const port = 3000;
+const port = parseInt(process.env.PORT || "3000", 10);
 
 const trpcHandler = async (req: Request): Promise<Response> => {
   const origin = req.headers.get("Origin");
@@ -45,6 +46,7 @@ const trpcHandler = async (req: Request): Promise<Response> => {
 
 Bun.serve({
   port,
+  hostname: process.env.HOST || "0.0.0.0",
   routes: {
     "/trpc/*": trpcHandler,
     "/": (req) =>

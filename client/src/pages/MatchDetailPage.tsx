@@ -197,7 +197,7 @@ export function MatchDetailPage() {
                           {text}
                         </span>
                         <span className="text-slate-700">
-                          {event.playerId}
+                          {event.playerName ?? event.playerId}
                         </span>
                       </div>
                     );

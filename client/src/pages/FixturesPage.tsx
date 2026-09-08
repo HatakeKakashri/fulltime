@@ -12,6 +12,8 @@ type Fixture = {
   awayClubName: string;
   status: string;
   matchId: string | null | undefined;
+  homeScore?: number | null;
+  awayScore?: number | null;
 };
 
 const ALL_MATCHDAYS = "all" as const;
@@ -22,7 +24,7 @@ export function FixturesPage() {
   const [selected, setSelected] = useState<Selection>(ALL_MATCHDAYS);
 
   // Discover the current season first (same pattern as LeaguePage)
-  const { data: season, isLoading: seasonLoading } =
+  const { data: season, isLoading: seasonLoading, isError: seasonError } =
     trpc.league.currentSeason.useQuery();
 
   // Fetch fixtures for that season. We always pull the whole season and filter
@@ -56,13 +58,21 @@ export function FixturesPage() {
   }
 
   if (!season) {
+    if (seasonError) {
+      return (
+        <div className="flex flex-col items-center justify-center h-64 gap-2">
+          <span className="text-red-500 font-medium">Unable to connect to server</span>
+          <span className="text-slate-500 text-sm">
+            Make sure the server is running on port 3000.
+          </span>
+        </div>
+      );
+    }
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-2">
-        <span className="text-red-500 font-medium">No season found</span>
-        <span className="text-slate-500 text-sm">
-          Seed the database first with{" "}
-          <code className="bg-slate-100 px-1 rounded">bun run server/src/seed.ts</code>
-        </span>
+        <span className="text-slate-500 font-medium">No season found</span>
+        <p className="text-slate-500 text-sm">Create a season to get started.</p>
+        <CreateSeasonButton />
       </div>
     );
   }
@@ -212,7 +222,15 @@ function FixtureRow({
       <td className="px-3 py-2 font-medium text-slate-900">
         {fixture.homeClubName}
       </td>
-      <td className="px-3 py-2 text-center text-slate-400">vs</td>
+      <td className="px-3 py-2 text-center">
+        {fixture.homeScore != null && fixture.awayScore != null ? (
+          <span className="font-mono font-semibold text-slate-900">
+            {fixture.homeScore} – {fixture.awayScore}
+          </span>
+        ) : (
+          <span className="text-slate-400">vs</span>
+        )}
+      </td>
       <td className="px-3 py-2 font-medium text-slate-900">
         {fixture.awayClubName}
       </td>
@@ -235,5 +253,27 @@ function StatusBadge({ status }: { status: string }) {
     >
       {isSimulated ? "Simulated" : "Pending"}
     </span>
+  );
+}
+
+function CreateSeasonButton() {
+  const utils = trpc.useUtils();
+  const createMutation = trpc.season.create.useMutation({
+    onSuccess: () => {
+      utils.league.currentSeason.invalidate();
+      utils.league.standings.invalidate();
+      utils.league.fixtures.invalidate();
+    },
+  });
+
+  return (
+    <button
+      type="button"
+      onClick={() => createMutation.mutate({})}
+      disabled={createMutation.isPending}
+      className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+    >
+      {createMutation.isPending ? "Creating…" : "Create Season"}
+    </button>
   );
 }
