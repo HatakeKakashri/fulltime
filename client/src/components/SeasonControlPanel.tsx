@@ -22,22 +22,30 @@ export function SeasonControlPanel() {
   const utils = trpc.useUtils();
 
   const simulateNextMutation = trpc.season.simulateNextMatchday.useMutation({
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       setLastValidation([data.validationReport]);
-      // Invalidate all queries affected by simulation
-      utils.league.currentSeason.invalidate();
-      utils.league.standings.invalidate();
-      utils.league.fixtures.invalidate();
+      // Invalidate all queries affected by simulation — await to ensure
+      // React Query marks them stale and triggers refetch before the
+      // component re-renders.
+      await Promise.all([
+        utils.league.currentSeason.invalidate(),
+        utils.league.standings.invalidate(),
+        utils.league.fixtures.invalidate(),
+      ]);
     },
   });
 
   const simulateFullMutation = trpc.season.simulateFullSeason.useMutation({
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       setLastValidation(data.validationReport);
-      // Invalidate all queries affected by simulation
-      utils.league.currentSeason.invalidate();
-      utils.league.standings.invalidate();
-      utils.league.fixtures.invalidate();
+      // Invalidate all queries affected by simulation — await to ensure
+      // React Query marks them stale and triggers refetch before the
+      // component re-renders.
+      await Promise.all([
+        utils.league.currentSeason.invalidate(),
+        utils.league.standings.invalidate(),
+        utils.league.fixtures.invalidate(),
+      ]);
     },
   });
 

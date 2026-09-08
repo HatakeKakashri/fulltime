@@ -26,13 +26,13 @@
 ## 5. Server: Transactional simulateNextMatchday
 
 - [x] 5.1 In `server/src/services/season-scheduling.ts`, wrap the body of `simulateNextMatchday()` in `prisma.$transaction()` — the entire operation from reading the pending matchday through creating Match records to marking matchday SIMULATED must be atomic — verify: `bun test server/src/services/season-scheduling.test.ts` passes
-- [ ] 5.2 Add a test for concurrent simulation: call `simulateNextMatchday` twice simultaneously with the same seasonId — verify: only one succeeds, the other returns null (no duplicate Match rows)
+- [x] 5.2 Add a test for concurrent simulation: call `simulateNextMatchday` twice simultaneously with the same seasonId — verify: only one succeeds, the other returns null (no duplicate Match rows)
 
 ## 6. Server: Fix simulateFullSeason Empty-DB
 
 - [x] 6.1 In `server/src/trpc/procedures/season-simulate.ts`, change the `FullSeasonOutputSchema` from `finalSeasonStatus: z.enum(["COMPLETED"])` to `finalSeasonStatus: z.enum(["INITIALIZED", "IN_PROGRESS", "COMPLETED"])` — verify: schema compiles
 - [x] 6.2 Remove the `as "COMPLETED"` cast at line 256 — use the actual `finalStatus` value directly — verify: `npx tsc --noEmit` passes
-- [ ] 6.3 Add a test: call `simulateFullSeason` on an INITIALIZED season with no matchdays — verify: returns `finalSeasonStatus: "INITIALIZED"` with `totalMatchdays: 0`
+- [x] 6.3 Add a test: call `simulateFullSeason` on an INITIALIZED season with no matchdays — verify: returns `finalSeasonStatus: "INITIALIZED"` with `totalMatchdays: 0`
 
 ## 7. Server: UI-Driven Seeding (season.create)
 
@@ -52,13 +52,13 @@
 - [x] 9.1 In `server/src/trpc/procedures/match-result.ts`, after parsing `eventLogJson`, collect all unique `playerId` values and batch-resolve names via `prisma.player.findMany({ where: { id: { in: playerIds }, select: { id: true, name: true } } })` — verify: query compiles
 - [x] 9.2 Add `playerName: z.string()` to `MatchEventSchema` — verify: schema compiles
 - [x] 9.3 Map the resolved names into the event log array — verify: `npx tsc --noEmit` passes
-- [ ] 9.4 Add a test: simulate a match, call `match.result`, verify each event has a non-empty `playerName` — verify: test passes
+- [x] 9.4 Add a test: simulate a match, call `match.result`, verify each event has a non-empty `playerName` — verify: test passes
 
 ## 10. Server: StartingXI Validation
 
 - [x] 10.1 In `server/src/services/starting-xi.ts`, add `import { z } from "zod"` and a `PlayerIdsSchema = z.array(z.string().uuid()).length(11)` — verify: file compiles
 - [x] 10.2 In `saveStartingXI()`, call `PlayerIdsSchema.parse(playerIds)` before the upsert — verify: `npx tsc --noEmit` passes
-- [ ] 10.3 Add a test: call `saveStartingXI` with 10 IDs — verify: throws validation error
+- [x] 10.3 Add a test: call `saveStartingXI` with 10 IDs — verify: throws validation error
 
 ## 11. Client: Scores on Fixtures List
 

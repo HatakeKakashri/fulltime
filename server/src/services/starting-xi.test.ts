@@ -314,35 +314,51 @@ describe("isPlayerInStartingXI", () => {
 });
 
 describe("saveStartingXI", () => {
-  test("creates a new StartingXI row", async () => {
-    const playerIds = ["id-1", "id-2", "id-3"];
-    await saveStartingXI(clubBId, playerIds);
+  // 11 valid UUIDs for Zod validation (must have version digit 1-8 and variant digit 8-b)
+  const validXI = Array.from({ length: 11 }, (_, i) =>
+    `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`
+  );
+  const validXI2 = Array.from({ length: 11 }, (_, i) =>
+    `11111111-1111-4111-8111-${String(i).padStart(12, "0")}`
+  );
+
+  test("creates a new StartingXI row with valid 11 UUIDs", async () => {
+    await saveStartingXI(clubBId, validXI);
 
     const row = await prisma.startingXI.findUnique({
       where: { clubId: clubBId },
     });
 
     expect(row).not.toBeNull();
-    expect(row!.playerIds).toEqual(playerIds);
+    expect(row!.playerIds).toEqual(validXI);
     expect(row!.computedAt).toBeInstanceOf(Date);
   });
 
   test("upserts an existing StartingXI row", async () => {
-    const newPlayerIds = ["id-a", "id-b", "id-c", "id-d"];
-    await saveStartingXI(clubBId, newPlayerIds);
+    await saveStartingXI(clubBId, validXI2);
 
     const row = await prisma.startingXI.findUnique({
       where: { clubId: clubBId },
     });
 
     expect(row).not.toBeNull();
-    expect(row!.playerIds).toEqual(newPlayerIds);
+    expect(row!.playerIds).toEqual(validXI2);
 
     // Should still be only one row
     const count = await prisma.startingXI.count({
       where: { clubId: clubBId },
     });
     expect(count).toBe(1);
+  });
+
+  test("rejects playerIds with fewer than 11 elements", async () => {
+    const tooFew = validXI.slice(0, 10);
+    expect(() => saveStartingXI(clubBId, tooFew)).toThrow();
+  });
+
+  test("rejects playerIds with non-UUID strings", async () => {
+    const badIds = Array.from({ length: 11 }, (_, i) => `not-a-uuid-${i}`);
+    expect(() => saveStartingXI(clubBId, badIds)).toThrow();
   });
 });
 

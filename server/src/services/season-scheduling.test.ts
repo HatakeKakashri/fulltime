@@ -1,4 +1,5 @@
-import { describe, test, expect, mock, beforeEach } from "bun:test";
+import { describe, test, expect, mock, beforeEach, afterAll } from "bun:test";
+import { PrismaClient } from "@prisma/client";
 
 // ─── Comprehensive Mock Prisma Client ────────────────────────────────────────
 
@@ -38,6 +39,9 @@ const mockPrisma = {
       Promise.resolve({ id: "xi-1", clubId: "club-1", playerIds: [] })
     ),
   },
+  // simulateNextMatchday wraps its work in prisma.$transaction — the callback
+  // receives a transaction client, which here is just the mock itself.
+  $transaction: mock<AnyFn>(async (fn: any) => fn(mockPrisma)),
 };
 
 mock.module("../db", () => ({
@@ -417,4 +421,14 @@ describe("getSeasonStatus", () => {
     expect(result.completedMatchdays).toBe(2);
     expect(result.pendingFixtures).toBe(0);
   });
+});
+
+// ─── Cleanup ─────────────────────────────────────────────────────────────────
+
+afterAll(() => {
+  // mock.restore() does not reset mock.module overrides. Override back to a
+  // real Prisma client so the mock does not leak into other test files that
+  // import ./season-scheduling (e.g. season-simulate.test.ts uses real Prisma).
+  const realPrisma = new PrismaClient();
+  mock.module("../db", () => ({ prisma: realPrisma }));
 });

@@ -260,6 +260,28 @@ describe("season.simulateNextMatchday", () => {
     expect(result.validationReport.seasonStatusCorrect).toBe(true);
   });
 
+  test("concurrent calls: only one succeeds, no duplicate Match rows", async () => {
+    const seasonId = await buildTestSeason("INITIALIZED", 1);
+    const caller = appRouter.createCaller({ prisma } as any);
+
+    // Fire two simultaneous simulation requests
+    const [a, b] = await Promise.allSettled([
+      caller.season.simulateNextMatchday(),
+      caller.season.simulateNextMatchday(),
+    ]);
+
+    // Exactly one should have succeeded
+    const succeeded = [a, b].filter((r) => r.status === "fulfilled");
+    expect(succeeded.length).toBe(1);
+
+    // Count Match rows created for this season's fixtures — should be exactly 2
+    // (one per fixture in the single matchday), not 4 (which would indicate duplicates)
+    const matchCount = await prisma.match.count({
+      where: { fixture: { matchday: { seasonId } } },
+    });
+    expect(matchCount).toBe(2);
+  });
+
   test("returns NOT_FOUND when no season exists", async () => {
     // The NOT_FOUND path goes through requireCurrentSeason → findFirst returning null.
     // In a shared DB we cannot guarantee zero seasons, so we verify the error
@@ -315,6 +337,18 @@ describe("season.simulateFullSeason", () => {
     expect(result.totalMatchdays).toBe(0);
     expect(result.totalFixtures).toBe(0);
     expect(result.finalSeasonStatus).toBe("COMPLETED");
+    expect(result.validationReport).toHaveLength(0);
+  });
+
+  test("returns INITIALIZED with zero matchdays when season has no matchdays", async () => {
+    const emptySeasonId = await buildTestSeason("INITIALIZED", 0);
+    const caller = appRouter.createCaller({ prisma } as any);
+
+    const result = await caller.season.simulateFullSeason();
+
+    expect(result.totalMatchdays).toBe(0);
+    expect(result.totalFixtures).toBe(0);
+    expect(result.finalSeasonStatus).toBe("INITIALIZED");
     expect(result.validationReport).toHaveLength(0);
   });
 

@@ -174,6 +174,67 @@ describe("match.result", () => {
     });
   });
 
+  test("resolves playerName for event log entries when player exists in DB", async () => {
+    // Build a match with event log referencing actual clubA player IDs
+    const season = await prisma.season.create({
+      data: { startDate: new Date("2026-06-01"), status: "INITIALIZED" },
+    });
+    const clubA = await prisma.club.create({
+      data: { name: `${PREFIX}-pn-A-${season.id}`, seasonId: season.id },
+    });
+    const clubB = await prisma.club.create({
+      data: { name: `${PREFIX}-pn-B-${season.id}`, seasonId: season.id },
+    });
+    // Create a real player
+    const player = await prisma.player.create({
+      data: {
+        clubId: clubA.id,
+        name: "Test Player",
+        positionGroup: "FWD",
+        attack: 80,
+        defense: 50,
+        passing: 60,
+        physical: 65,
+        goalkeeping: 30,
+        overallRating: 70,
+      },
+    });
+    const matchday = await prisma.matchday.create({
+      data: { seasonId: season.id, index: 1, status: "SIMULATED" },
+    });
+    const fixture = await prisma.fixture.create({
+      data: {
+        matchdayId: matchday.id,
+        homeClubId: clubA.id,
+        awayClubId: clubB.id,
+        status: "SIMULATED",
+        seed: 999,
+      },
+    });
+    const match = await prisma.match.create({
+      data: {
+        fixtureId: fixture.id,
+        homeScore: 1,
+        awayScore: 0,
+        eventLogJson: JSON.stringify([
+          { minute: 45, type: "shot_attempt", teamId: clubA.id, playerId: player.id, outcome: "goal" },
+          { minute: 80, type: "foul", teamId: clubB.id, playerId: "nonexistent-player-id", outcome: "no_card" },
+        ]),
+        status: "COMPLETED",
+        simulatedAt: new Date(),
+      },
+    });
+    await prisma.fixture.update({ where: { id: fixture.id }, data: { matchId: match.id } });
+
+    const result = await caller.match.result({ matchId: match.id });
+
+    expect(result.match.eventLog).toHaveLength(2);
+    // Known player → resolved name
+    expect(result.match.eventLog[0].playerName).toBe("Test Player");
+    // Unknown player → falls back to the raw playerId
+    expect(result.match.eventLog[1].playerName).toBe("nonexistent-player-id");
+  });
+
   test("rejects the lowercase-status row (returns NOT_FOUND)", async () => {
     await expect(
       caller.match.result({ matchId: lowerMatchId })
