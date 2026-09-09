@@ -75,11 +75,13 @@ export function LeaguePage() {
           Home
         </button>
         <span>›</span>
-        <span className="text-slate-900 font-medium">League</span>
+        <span className="text-slate-900 font-medium">
+          {season?.year} Season
+        </span>
       </div>
 
       {/* Season Control Panel */}
-      <SeasonControlPanel seasonId={seasonId} />
+      <SeasonControlPanel seasonId={seasonId} seasonStatus={season?.status} />
 
       {/* League Standings */}
       <section>

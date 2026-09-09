@@ -28,6 +28,18 @@ export function HomePage() {
     },
   });
 
+  // Mark completed mutation
+  const markCompletedMutation = trpc.season.markCompleted.useMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        utils.league.seasons.invalidate(),
+        utils.league.currentSeason.invalidate(),
+        utils.league.standings.invalidate(),
+        utils.league.fixtures.invalidate(),
+      ]);
+    },
+  });
+
   if (seasonsLoading || healthLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -37,7 +49,7 @@ export function HomePage() {
   }
 
   const seasons = seasonsData?.seasons ?? [];
-  const currentSeason = seasons.find((s) => s.status === "IN_PROGRESS" || s.status === "INITIALIZED");
+  const currentSeason = seasons.find((s) => s.status === "IN_PROGRESS" || s.status === "INITIALIZED" || s.status === "SIMULATED");
   const previousSeasons = seasons.filter((s) => s.status === "COMPLETED");
 
   return (
@@ -60,7 +72,7 @@ export function HomePage() {
           >
             <div>
               <p className="font-medium text-slate-900">
-                Season {currentSeason.id.slice(0, 8)}…
+                {currentSeason.year} Season
               </p>
               <p className="text-sm text-slate-500">
                 Status:{" "}
@@ -69,7 +81,24 @@ export function HomePage() {
                 </span>
               </p>
             </div>
-            <span className="text-blue-600 text-sm font-medium">View League →</span>
+            <div className="flex items-center gap-2">
+              {currentSeason.status === "SIMULATED" && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (confirm("Mark this season as completed?")) {
+                      markCompletedMutation.mutate();
+                    }
+                  }}
+                  disabled={markCompletedMutation.isPending}
+                  className="px-3 py-1 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {markCompletedMutation.isPending ? "Marking…" : "Mark Completed"}
+                </button>
+              )}
+              <span className="text-blue-600 text-sm font-medium">View League →</span>
+            </div>
           </div>
         ) : (
           <div className="text-center py-8">
@@ -104,7 +133,7 @@ export function HomePage() {
               >
                 <div>
                   <p className="font-medium text-slate-900">
-                    Season {season.id.slice(0, 8)}…
+                    {season.year} Season
                   </p>
                   <p className="text-xs text-slate-500">
                     Created: {new Date(season.createdAt).toLocaleDateString()}
@@ -126,26 +155,26 @@ export function HomePage() {
         )}
       </section>
 
-      {/* Health Stats Widget */}
+      {/* Testing Cycle Health Widget */}
       {healthStats && (
         <section className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold text-slate-900 mb-4">Simulation Health</h2>
+          <h2 className="text-lg font-semibold text-slate-900 mb-4">Testing Cycle Health</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="text-center p-4 bg-slate-50 rounded-lg">
               <p className="text-2xl font-bold text-slate-900">{healthStats.totalSeasons}</p>
-              <p className="text-sm text-slate-500">Total Seasons</p>
+              <p className="text-sm text-slate-500">Seasons Simulated</p>
             </div>
             <div className="text-center p-4 bg-slate-50 rounded-lg">
               <p className="text-2xl font-bold text-slate-900">{healthStats.completedMatches}</p>
-              <p className="text-sm text-slate-500">Matches Played</p>
+              <p className="text-sm text-slate-500">Total Matches</p>
             </div>
             <div className="text-center p-4 bg-slate-50 rounded-lg">
               <p className="text-2xl font-bold text-slate-900">{healthStats.avgGoalsPerMatch}</p>
               <p className="text-sm text-slate-500">Avg Goals/Match</p>
             </div>
             <div className="text-center p-4 bg-slate-50 rounded-lg">
-              <p className="text-2xl font-bold text-slate-900">{healthStats.totalClubs}</p>
-              <p className="text-sm text-slate-500">Clubs</p>
+              <p className="text-2xl font-bold text-slate-900">{healthStats.validationErrorRate}%</p>
+              <p className="text-sm text-slate-500">Validation Errors ({healthStats.validationErrorFraction})</p>
             </div>
           </div>
         </section>
