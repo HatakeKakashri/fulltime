@@ -1,7 +1,10 @@
+import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { skipToken } from "@tanstack/react-query";
 import { trpc } from "../trpc/client";
 import { SeasonControlPanel } from "../components/SeasonControlPanel";
+
+const FIXTURE_PAGE_SIZE = 10;
 
 export function LeaguePage() {
   const { seasonId } = useParams<{ seasonId: string }>();
@@ -28,6 +31,13 @@ export function LeaguePage() {
       seasonId ? { seasonId } : skipToken
     );
 
+  // Bug fix (2026-09-10): fixture lists were hard-capped at 10 rows with a
+  // non-interactive "+N more fixtures" <p> tag — the remaining rows had no
+  // way to be reached. Tracking expanded state per pane so "Show all" /
+  // "Show less" actually works instead of being decorative text.
+  const [upcomingExpanded, setUpcomingExpanded] = useState(false);
+  const [completedExpanded, setCompletedExpanded] = useState(false);
+
   // Surface server/connection errors before any loading spinner so the
   // user sees the failure state instead of an indefinite spinner.
   if (seasonError) {
@@ -53,6 +63,13 @@ export function LeaguePage() {
   const fixtures = fixturesData?.fixtures ?? [];
   const upcomingFixtures = fixtures.filter((f) => f.status === "PENDING");
   const completedFixtures = fixtures.filter((f) => f.status === "SIMULATED");
+
+  const visibleUpcoming = upcomingExpanded
+    ? upcomingFixtures
+    : upcomingFixtures.slice(0, FIXTURE_PAGE_SIZE);
+  const visibleCompleted = completedExpanded
+    ? completedFixtures
+    : completedFixtures.slice(0, FIXTURE_PAGE_SIZE);
 
   return (
     <div className="space-y-8">
@@ -145,7 +162,7 @@ export function LeaguePage() {
             </h3>
             {upcomingFixtures.length > 0 ? (
               <div className="space-y-2">
-                {upcomingFixtures.slice(0, 10).map((fixture) => (
+                {visibleUpcoming.map((fixture) => (
                   <div
                     key={fixture.id}
                     className="flex items-center justify-between p-2 bg-slate-50 rounded"
@@ -164,10 +181,16 @@ export function LeaguePage() {
                     </span>
                   </div>
                 ))}
-                {upcomingFixtures.length > 10 && (
-                  <p className="text-xs text-slate-500 text-center">
-                    +{upcomingFixtures.length - 10} more fixtures
-                  </p>
+                {upcomingFixtures.length > FIXTURE_PAGE_SIZE && (
+                  <button
+                    type="button"
+                    onClick={() => setUpcomingExpanded((v) => !v)}
+                    className="w-full text-xs text-blue-600 hover:text-blue-700 hover:underline text-center py-1 focus:outline-none focus:underline"
+                  >
+                    {upcomingExpanded
+                      ? "Show less"
+                      : `+${upcomingFixtures.length - FIXTURE_PAGE_SIZE} more fixtures`}
+                  </button>
                 )}
               </div>
             ) : (
@@ -184,10 +207,19 @@ export function LeaguePage() {
             </h3>
             {completedFixtures.length > 0 ? (
               <div className="space-y-2">
-                {completedFixtures.slice(0, 10).map((fixture) => (
-                  <div
+                {visibleCompleted.map((fixture) => (
+                  <Link
                     key={fixture.id}
-                    className="flex items-center justify-between p-2 bg-slate-50 rounded"
+                    to={fixture.matchId ? `/match/${fixture.matchId}` : "#"}
+                    aria-disabled={!fixture.matchId}
+                    className={`flex items-center justify-between p-2 bg-slate-50 rounded transition-colors ${
+                      fixture.matchId
+                        ? "hover:bg-slate-100 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        : "cursor-not-allowed opacity-60"
+                    }`}
+                    onClick={(e) => {
+                      if (!fixture.matchId) e.preventDefault();
+                    }}
                   >
                     <div className="flex-1">
                       <span className="text-sm font-medium text-slate-900">
@@ -206,12 +238,18 @@ export function LeaguePage() {
                         MD {fixture.matchdayIndex}
                       </span>
                     </div>
-                  </div>
+                  </Link>
                 ))}
-                {completedFixtures.length > 10 && (
-                  <p className="text-xs text-slate-500 text-center">
-                    +{completedFixtures.length - 10} more fixtures
-                  </p>
+                {completedFixtures.length > FIXTURE_PAGE_SIZE && (
+                  <button
+                    type="button"
+                    onClick={() => setCompletedExpanded((v) => !v)}
+                    className="w-full text-xs text-blue-600 hover:text-blue-700 hover:underline text-center py-1 focus:outline-none focus:underline"
+                  >
+                    {completedExpanded
+                      ? "Show less"
+                      : `+${completedFixtures.length - FIXTURE_PAGE_SIZE} more fixtures`}
+                  </button>
                 )}
               </div>
             ) : (
