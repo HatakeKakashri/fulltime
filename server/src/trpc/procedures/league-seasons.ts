@@ -8,6 +8,7 @@ import { publicProcedure } from "../init";
 const SeasonViewSchema = z.object({
   id: z.string().uuid(),
   status: z.string(),
+  year: z.number(),
   createdAt: z.date(),
 });
 
@@ -23,6 +24,7 @@ export const leagueSeasons = publicProcedure
       select: {
         id: true,
         status: true,
+        year: true,
         createdAt: true,
       },
     });

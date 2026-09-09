@@ -2,38 +2,32 @@ import { z } from "zod";
 import { publicProcedure } from "../init";
 
 /**
- * `season.healthStats` — returns simulation health summary.
- * Used by the Home Page to display aggregated simulation metrics.
+ * `season.healthStats` — returns testing cycle health summary.
+ * Used by the Home Page to display aggregated simulation metrics across all seasons.
  *
- * Returns: totalSeasons, completedMatches, avgGoalsPerMatch
+ * Returns: totalSeasons, completedMatches, totalGoals, avgGoalsPerMatch, validationErrorRate
  */
 const OutputSchema = z.object({
   totalSeasons: z.number(),
-  completedSeasons: z.number(),
-  inProgressSeasons: z.number(),
-  totalMatches: z.number(),
   completedMatches: z.number(),
   totalGoals: z.number(),
   avgGoalsPerMatch: z.number(),
-  totalPlayers: z.number(),
-  totalClubs: z.number(),
+  validationErrorRate: z.number(),
+  validationErrorFraction: z.string(),
 });
 
 export const seasonHealthStats = publicProcedure
   .output(OutputSchema)
   .query(async ({ ctx }) => {
-    // Aggregate season counts
-    const [totalSeasons, completedSeasons, inProgressSeasons] = await Promise.all([
-      ctx.prisma.season.count(),
-      ctx.prisma.season.count({ where: { status: "COMPLETED" } }),
-      ctx.prisma.season.count({ where: { status: "IN_PROGRESS" } }),
-    ]);
+    // Count COMPLETED seasons (testing cycle metric)
+    const totalSeasons = await ctx.prisma.season.count({
+      where: { status: "COMPLETED" },
+    });
 
     // Aggregate match counts
-    const [totalMatches, completedMatches] = await Promise.all([
-      ctx.prisma.match.count(),
-      ctx.prisma.match.count({ where: { status: "COMPLETED" } }),
-    ]);
+    const completedMatches = await ctx.prisma.match.count({
+      where: { status: "COMPLETED" },
+    });
 
     // Calculate total goals from completed matches
     const goalAggregation = await ctx.prisma.match.aggregate({
@@ -50,24 +44,49 @@ export const seasonHealthStats = publicProcedure
 
     const avgGoalsPerMatch =
       completedMatches > 0
-        ? Math.round((totalGoals / completedMatches) * 100) / 100
+        ? Math.round((totalGoals / completedMatches) * 10) / 10
         : 0;
 
-    // Player and club counts
-    const [totalPlayers, totalClubs] = await Promise.all([
-      ctx.prisma.player.count(),
-      ctx.prisma.club.count(),
-    ]);
+    // Calculate validation error rate from matchday statuses
+    // A matchday is "failed" if it has fixtures that are still PENDING after the matchday is marked SIMULATED
+    const totalMatchdays = await ctx.prisma.matchday.count();
+    const simulatedMatchdays = await ctx.prisma.matchday.count({
+      where: { status: "SIMULATED" },
+    });
+
+    // Count matchdays with validation errors (fixtures with mismatched statuses)
+    let failedMatchdays = 0;
+    if (simulatedMatchdays > 0) {
+      // Get all simulated matchdays and check for validation errors
+      const simulatedMatchdayRecords = await ctx.prisma.matchday.findMany({
+        where: { status: "SIMULATED" },
+        select: { id: true },
+      });
+
+      for (const matchday of simulatedMatchdayRecords) {
+        // Check if any fixture in this matchday is still PENDING
+        const pendingFixtures = await ctx.prisma.fixture.count({
+          where: { matchdayId: matchday.id, status: "PENDING" },
+        });
+        if (pendingFixtures > 0) {
+          failedMatchdays++;
+        }
+      }
+    }
+
+    const validationErrorRate =
+      simulatedMatchdays > 0
+        ? Math.round((failedMatchdays / simulatedMatchdays) * 1000) / 10
+        : 0;
+
+    const validationErrorFraction = `${failedMatchdays}/${simulatedMatchdays}`;
 
     return {
       totalSeasons,
-      completedSeasons,
-      inProgressSeasons,
-      totalMatches,
       completedMatches,
       totalGoals,
       avgGoalsPerMatch,
-      totalPlayers,
-      totalClubs,
+      validationErrorRate,
+      validationErrorFraction,
     };
   });

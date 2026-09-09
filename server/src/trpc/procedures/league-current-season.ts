@@ -15,6 +15,7 @@ export const leagueCurrentSeason = publicProcedure
       id: z.string().uuid(),
       startDate: z.date(),
       status: z.string(),
+      year: z.number(),
     })
   )
   .query(async ({ ctx }) => {

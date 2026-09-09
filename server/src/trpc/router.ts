@@ -14,6 +14,8 @@ import {
   seasonSimulateFullSeason,
 } from "./procedures/season-simulate";
 import { seasonCreate } from "./procedures/season-create";
+import { seasonMarkCompleted } from "./procedures/season-mark-completed";
+import { seasonResetWorld } from "./procedures/season-reset-world";
 import { router } from "./init";
 
 /**
@@ -45,6 +47,8 @@ export const appRouter = router({
     simulateNextMatchday: seasonSimulateNextMatchday,
     simulateFullSeason: seasonSimulateFullSeason,
     healthStats: seasonHealthStats,
+    markCompleted: seasonMarkCompleted,
+    resetWorld: seasonResetWorld,
   }),
 });
 
