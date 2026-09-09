@@ -55,6 +55,7 @@ async function createFixture(
       awayClubId,
       status: "SIMULATED",
       matchId: "placeholder", // updated below
+      seed: matchdayIndex,
     },
   });
   return { fixtureId: fixture.id };

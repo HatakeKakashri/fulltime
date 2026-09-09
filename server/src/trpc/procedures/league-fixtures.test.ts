@@ -51,6 +51,7 @@ async function createSeasonWithFixtures(): Promise<string> {
           homeClubId: clubIds[homeIdx],
           awayClubId: clubIds[awayIdx],
           status: "PENDING",
+          seed: md * 100 + f,
         },
       });
     }
@@ -185,6 +186,7 @@ describe("league.fixtures", () => {
           homeClubId: clubA.id,
           awayClubId: clubB.id,
           status: "PENDING",
+          seed: md,
         },
       });
     }
