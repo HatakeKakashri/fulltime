@@ -1,12 +1,12 @@
 import { useParams } from "react-router-dom";
+import { skipToken } from "@tanstack/react-query";
 import { trpc } from "../trpc/client";
 
 export function ClubSquadPage() {
   const { clubId } = useParams<{ clubId: string }>();
 
   const { data, isLoading, error } = trpc.club.squad.useQuery(
-    { clubId: clubId ?? "" },
-    { enabled: !!clubId }
+    clubId ? { clubId } : skipToken
   );
 
   if (isLoading) {
@@ -74,6 +74,7 @@ export function ClubSquadPage() {
         </h2>
         <div className="overflow-x-auto rounded-lg shadow">
           <table className="w-full text-sm bg-white">
+            <caption className="sr-only">Squad for {club.name}</caption>
             <thead className="bg-slate-900 text-white">
               <tr>
                 <th className="px-3 py-2 text-left">Name</th>

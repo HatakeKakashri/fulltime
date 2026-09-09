@@ -1,19 +1,75 @@
 import { useState } from "react";
+import type { inferRouterOutputs } from "@trpc/server";
 import { trpc } from "../trpc/client";
+import type { AppRouter } from "../../../server/src/trpc/router";
 
-interface ValidationReport {
-  matchdayIndex: number;
-  allFixturesSimulated: boolean;
-  allFixturesHaveMatchId: boolean;
-  allMatchesCompleted: boolean;
-  seasonStatusCorrect: boolean;
-  passed: boolean;
-  errors: string[];
-}
+type RouterOutputs = inferRouterOutputs<AppRouter>;
+type ValidationReport = RouterOutputs["season"]["simulateNextMatchday"]["validationReport"];
 
 interface SeasonControlPanelProps {
   seasonId: string;
   seasonStatus?: string;
+}
+
+// Invalidate every league/season query that may have changed after a season
+// mutation. Centralized so each handler doesn't have to repeat the list.
+async function invalidateSeasonQueries(utils: ReturnType<typeof trpc.useUtils>) {
+  await Promise.all([
+    utils.league.currentSeason.invalidate(),
+    utils.league.standings.invalidate(),
+    utils.league.fixtures.invalidate(),
+    utils.league.seasons.invalidate(),
+  ]);
+}
+
+interface ConfirmDialogProps {
+  open: boolean;
+  title: string;
+  message: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+function ConfirmDialog({
+  open,
+  title,
+  message,
+  onConfirm,
+  onCancel,
+}: ConfirmDialogProps) {
+  if (!open) return null;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="confirm-title"
+    >
+      <div className="absolute inset-0 bg-black/50" onClick={onCancel} />
+      <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+        <h3 id="confirm-title" className="text-lg font-semibold text-slate-900 mb-2">
+          {title}
+        </h3>
+        <p className="text-sm text-slate-500 mb-6">{message}</p>
+        <div className="flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-md hover:bg-slate-200 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition-colors"
+          >
+            Confirm
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function SeasonControlPanel({ seasonId, seasonStatus }: SeasonControlPanelProps) {
@@ -21,53 +77,53 @@ export function SeasonControlPanel({ seasonId, seasonStatus }: SeasonControlPane
     null
   );
 
+  // Tracks which confirmation dialog (if any) is currently open.
+  // We use a discriminated shape so future dialogs can plug in cleanly.
+  type ConfirmState =
+    | { kind: "none" }
+    | { kind: "simulateFull" }
+    | { kind: "markCompleted" };
+  const [confirmState, setConfirmState] = useState<ConfirmState>({ kind: "none" });
+
   const utils = trpc.useUtils();
+
+  // NOTE: server procedures (simulateNextMatchday, simulateFullSeason,
+  // markCompleted, create) all derive their target season server-side from
+  // the most-recent non-COMPLETED row rather than accepting a seasonId arg.
+  // The `seasonId` prop is currently informational only; if server procedures
+  // gain a seasonId input, wire it through here.
 
   const simulateNextMutation = trpc.season.simulateNextMatchday.useMutation({
     onSuccess: async (data) => {
-      setLastValidation([data.validationReport]);
-      // Invalidate all queries affected by simulation
-      await Promise.all([
-        utils.league.currentSeason.invalidate(),
-        utils.league.standings.invalidate(),
-        utils.league.fixtures.invalidate(),
-        utils.league.seasons.invalidate(),
-      ]);
+      setLastValidation(
+        Array.isArray(data.validationReport)
+          ? data.validationReport
+          : [data.validationReport]
+      );
+      await invalidateSeasonQueries(utils);
     },
   });
 
   const simulateFullMutation = trpc.season.simulateFullSeason.useMutation({
     onSuccess: async (data) => {
-      setLastValidation(data.validationReport);
-      // Invalidate all queries affected by simulation
-      await Promise.all([
-        utils.league.currentSeason.invalidate(),
-        utils.league.standings.invalidate(),
-        utils.league.fixtures.invalidate(),
-        utils.league.seasons.invalidate(),
-      ]);
+      setLastValidation(
+        Array.isArray(data.validationReport)
+          ? data.validationReport
+          : [data.validationReport]
+      );
+      await invalidateSeasonQueries(utils);
     },
   });
 
   const createMutation = trpc.season.create.useMutation({
     onSuccess: async () => {
-      await Promise.all([
-        utils.league.currentSeason.invalidate(),
-        utils.league.standings.invalidate(),
-        utils.league.fixtures.invalidate(),
-        utils.league.seasons.invalidate(),
-      ]);
+      await invalidateSeasonQueries(utils);
     },
   });
 
   const markCompletedMutation = trpc.season.markCompleted.useMutation({
     onSuccess: async () => {
-      await Promise.all([
-        utils.league.currentSeason.invalidate(),
-        utils.league.standings.invalidate(),
-        utils.league.fixtures.invalidate(),
-        utils.league.seasons.invalidate(),
-      ]);
+      await invalidateSeasonQueries(utils);
     },
   });
 
@@ -100,22 +156,6 @@ export function SeasonControlPanel({ seasonId, seasonStatus }: SeasonControlPane
           </button>
         )}
 
-        {/* Reset Season button - shown for INITIALIZED, IN_PROGRESS, or SIMULATED */}
-        {(showInitInProgress || showSimulated) && (
-          <button
-            type="button"
-            onClick={() => {
-              if (confirm("Reset this season? Only the current season's data will be deleted.")) {
-                createMutation.mutate({});
-              }
-            }}
-            disabled={isPending}
-            className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {createMutation.isPending ? "Resetting…" : "Reset Season"}
-          </button>
-        )}
-
         {/* Simulate Next Matchday button - shown for INITIALIZED or IN_PROGRESS, grayed for SIMULATED */}
         {(showInitInProgress || showSimulated) && (
           <button
@@ -138,11 +178,7 @@ export function SeasonControlPanel({ seasonId, seasonStatus }: SeasonControlPane
         {(showInitInProgress || showSimulated) && (
           <button
             type="button"
-            onClick={() => {
-              if (confirm("Simulate the entire remaining season?")) {
-                simulateFullMutation.mutate();
-              }
-            }}
+            onClick={() => setConfirmState({ kind: "simulateFull" })}
             disabled={isPending || showSimulated}
             className={`px-4 py-2 text-white text-sm font-medium rounded-md transition-colors ${
               showSimulated
@@ -160,11 +196,7 @@ export function SeasonControlPanel({ seasonId, seasonStatus }: SeasonControlPane
         {showSimulated && (
           <button
             type="button"
-            onClick={() => {
-              if (confirm("Mark this season as completed?")) {
-                markCompletedMutation.mutate();
-              }
-            }}
+            onClick={() => setConfirmState({ kind: "markCompleted" })}
             disabled={isPending}
             className="px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
@@ -221,7 +253,10 @@ export function SeasonControlPanel({ seasonId, seasonStatus }: SeasonControlPane
                 key={report.matchdayIndex}
                 className="flex items-center gap-2 text-sm"
               >
-                <span aria-label={report.passed ? "Validation passed" : "Validation failed"}>
+                <span
+                  role="img"
+                  aria-label={report.passed ? "Validation passed" : "Validation failed"}
+                >
                   {report.passed ? "✅" : "❌"}
                 </span>
                 <span className="text-slate-600">
@@ -237,6 +272,28 @@ export function SeasonControlPanel({ seasonId, seasonStatus }: SeasonControlPane
           </div>
         </div>
       )}
+
+      {/* Confirmation dialogs */}
+      <ConfirmDialog
+        open={confirmState.kind === "simulateFull"}
+        title="Simulate Full Season"
+        message="Simulate the entire remaining season? This will run all pending matchdays."
+        onConfirm={() => {
+          setConfirmState({ kind: "none" });
+          simulateFullMutation.mutate();
+        }}
+        onCancel={() => setConfirmState({ kind: "none" })}
+      />
+      <ConfirmDialog
+        open={confirmState.kind === "markCompleted"}
+        title="Mark Season Completed"
+        message="Mark this season as completed? This moves the season out of the current slot."
+        onConfirm={() => {
+          setConfirmState({ kind: "none" });
+          markCompletedMutation.mutate();
+        }}
+        onCancel={() => setConfirmState({ kind: "none" })}
+      />
     </div>
   );
 }

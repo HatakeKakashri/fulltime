@@ -43,7 +43,9 @@ describe("SeasonControlPanel", () => {
       </TestWrapper>
     );
     // Without a live server, the component enters loading state
-    expect(screen.getByText(/Season Control/i)).toBeDefined();
+    // Use getAllByText because DOM may leak between test files
+    const matches = screen.getAllByText(/Season Control/i);
+    expect(matches.length).toBeGreaterThanOrEqual(1);
   });
 
   it("renders without crashing", () => {

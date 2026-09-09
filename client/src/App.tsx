@@ -1,11 +1,13 @@
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Link, NavLink, Route, Routes } from "react-router-dom";
 import { TRPCProvider } from "./trpc/provider";
-import { HomePage } from "./pages/HomePage";
-import { LeaguePage } from "./pages/LeaguePage";
-import { TeamPage } from "./pages/TeamPage";
-import { MatchDetailPage } from "./pages/MatchDetailPage";
-import { ClubSquadPage } from "./pages/ClubSquadPage";
 import { SettingsMenu } from "./components/SettingsMenu";
+
+const HomePage = lazy(() => import("./pages/HomePage").then(m => ({ default: m.HomePage })));
+const LeaguePage = lazy(() => import("./pages/LeaguePage").then(m => ({ default: m.LeaguePage })));
+const TeamPage = lazy(() => import("./pages/TeamPage").then(m => ({ default: m.TeamPage })));
+const MatchDetailPage = lazy(() => import("./pages/MatchDetailPage").then(m => ({ default: m.MatchDetailPage })));
+const ClubSquadPage = lazy(() => import("./pages/ClubSquadPage").then(m => ({ default: m.ClubSquadPage })));
 
 function NavItem({
   to,
@@ -18,6 +20,7 @@ function NavItem({
     <NavLink
       to={to}
       end={to === "/"}
+      aria-current="page"
       className={({ isActive }) =>
         `text-sm hover:text-slate-300 ${
           isActive ? "text-white font-semibold underline" : "text-slate-300"
@@ -59,14 +62,16 @@ export function App() {
             </div>
           </nav>
           <main className="p-4">
-            <Routes>
-              <Route path="/" element={<HomePage />} />
-              <Route path="/league/:seasonId" element={<LeaguePage />} />
-              <Route path="/team/:teamId" element={<TeamPage />} />
-              <Route path="/match/:matchId" element={<MatchDetailPage />} />
-              <Route path="/club/:clubId" element={<ClubSquadPage />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+            <Suspense fallback={<div className="flex items-center justify-center h-64"><span className="text-slate-500">Loading…</span></div>}>
+              <Routes>
+                <Route path="/" element={<HomePage />} />
+                <Route path="/league/:seasonId" element={<LeaguePage />} />
+                <Route path="/team/:teamId" element={<TeamPage />} />
+                <Route path="/match/:matchId" element={<MatchDetailPage />} />
+                <Route path="/club/:clubId" element={<ClubSquadPage />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
           </main>
         </div>
       </BrowserRouter>

@@ -1,4 +1,5 @@
 import { useParams } from "react-router-dom";
+import { skipToken } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "../../../server/src/trpc/router";
 import { trpc } from "../trpc/client";
@@ -92,8 +93,7 @@ export function MatchDetailPage() {
   const { matchId } = useParams<{ matchId: string }>();
 
   const { data, isLoading, error } = trpc.match.result.useQuery(
-    { matchId: matchId ?? "" },
-    { enabled: !!matchId }
+    matchId ? { matchId } : skipToken
   );
 
   // Mobile landscape enforcement: portrait shows rotate prompt
@@ -191,7 +191,7 @@ export function MatchDetailPage() {
                         className="flex items-center gap-3 text-sm py-1 border-b border-slate-100 last:border-0"
                       >
                         <span className="text-slate-400 w-12 text-right">
-                          {event.minute}'
+                          {event.minute ?? "?"}′
                         </span>
                         <span className={`font-medium ${className}`}>
                           {text}
@@ -231,13 +231,18 @@ export function MatchDetailPage() {
       </div>
 
       {/* Rotate prompt — visible only in portrait on mobile */}
-      <div className="hidden max-md:portrait:flex fixed inset-0 z-50 flex-col items-center justify-center gap-4 bg-slate-950 p-8 text-center text-white">
+      <div
+        role="status"
+        className="hidden max-md:portrait:flex fixed inset-0 z-50 flex-col items-center justify-center gap-4 bg-slate-950 p-8 text-center text-white"
+      >
         <svg
           xmlns="http://www.w3.org/2000/svg"
           className="h-12 w-12"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
+          aria-hidden="true"
+          focusable="false"
         >
           <path
             strokeLinecap="round"
@@ -246,7 +251,7 @@ export function MatchDetailPage() {
             d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
           />
         </svg>
-        <p className="text-lg font-semibold">Rotate your device</p>
+        <h2 className="text-lg font-semibold">Rotate your device</h2>
         <p className="text-sm text-slate-400">
           This match breakdown is designed for landscape viewing.
         </p>

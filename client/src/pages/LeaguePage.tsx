@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { skipToken } from "@tanstack/react-query";
 import { trpc } from "../trpc/client";
 import { SeasonControlPanel } from "../components/SeasonControlPanel";
@@ -7,7 +7,12 @@ export function LeaguePage() {
   const { seasonId } = useParams<{ seasonId: string }>();
   const navigate = useNavigate();
 
-  // Fetch season details
+  // Fetch season metadata for breadcrumb + control panel status.
+  // NOTE: There is no `league.seasonById` procedure yet, and the
+  // `league.standings` / `league.fixtures` outputs do not include the
+  // season's `year` or `status`. Until either of those is added, this
+  // falls back to `league.currentSeason`, which may be a *different*
+  // season than the one in the URL (e.g. when viewing a past season).
   const { data: season, isLoading: seasonLoading, isError: seasonError } =
     trpc.league.currentSeason.useQuery();
 
@@ -23,23 +28,8 @@ export function LeaguePage() {
       seasonId ? { seasonId } : skipToken
     );
 
-  if (seasonLoading || fixturesLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <span className="text-slate-500">Loading league data…</span>
-      </div>
-    );
-  }
-
-  if (!seasonId) {
-    return (
-      <div className="flex flex-col items-center justify-center h-64 gap-2">
-        <span className="text-slate-500 font-medium">No season selected</span>
-        <p className="text-slate-500 text-sm">Select a season from the home page.</p>
-      </div>
-    );
-  }
-
+  // Surface server/connection errors before any loading spinner so the
+  // user sees the failure state instead of an indefinite spinner.
   if (seasonError) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-2">
@@ -51,10 +41,10 @@ export function LeaguePage() {
     );
   }
 
-  if (standingsLoading) {
+  if (seasonLoading || standingsLoading || fixturesLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <span className="text-slate-500">Loading standings…</span>
+        <span className="text-slate-500">Loading league data…</span>
       </div>
     );
   }
@@ -68,12 +58,12 @@ export function LeaguePage() {
     <div className="space-y-8">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-slate-500">
-        <button
-          onClick={() => navigate("/")}
+        <Link
+          to="/"
           className="hover:text-slate-700 transition-colors"
         >
           Home
-        </button>
+        </Link>
         <span>›</span>
         <span className="text-slate-900 font-medium">
           {season?.year} Season
@@ -81,7 +71,7 @@ export function LeaguePage() {
       </div>
 
       {/* Season Control Panel */}
-      <SeasonControlPanel seasonId={seasonId} seasonStatus={season?.status} />
+      <SeasonControlPanel seasonId={seasonId!} seasonStatus={season?.status} />
 
       {/* League Standings */}
       <section>
@@ -90,6 +80,7 @@ export function LeaguePage() {
         </h1>
         <div className="overflow-x-auto rounded-lg shadow">
           <table className="w-full text-sm bg-white">
+            <caption className="sr-only">League Standings</caption>
             <thead className="bg-slate-900 text-white">
               <tr>
                 <th className="px-3 py-2 text-left">#</th>
@@ -108,12 +99,16 @@ export function LeaguePage() {
               {clubs.map((row) => (
                 <tr
                   key={row.clubId}
-                  className="hover:bg-slate-50 cursor-pointer"
-                  onClick={() => navigate(`/team/${row.clubId}`)}
+                  className="hover:bg-slate-50"
                 >
                   <td className="px-3 py-2">{row.position}</td>
                   <td className="px-3 py-2 font-medium text-slate-900">
-                    {row.clubName}
+                    <Link
+                      to={`/team/${row.clubId}`}
+                      className="hover:text-blue-700 hover:underline focus:outline-none focus:underline"
+                    >
+                      {row.clubName}
+                    </Link>
                   </td>
                   <td className="px-3 py-2 text-center">{row.played}</td>
                   <td className="px-3 py-2 text-center">{row.won}</td>
@@ -176,7 +171,7 @@ export function LeaguePage() {
                 )}
               </div>
             ) : (
-              <p className="text-sm text-slate-500 text-center py-4">
+              <p className="text-sm text-slate-600 text-center py-4">
                 No upcoming fixtures
               </p>
             )}
@@ -220,7 +215,7 @@ export function LeaguePage() {
                 )}
               </div>
             ) : (
-              <p className="text-sm text-slate-500 text-center py-4">
+              <p className="text-sm text-slate-600 text-center py-4">
                 No completed fixtures yet
               </p>
             )}
@@ -235,27 +230,27 @@ export function LeaguePage() {
           <SeasonStatCard
             title="Top Scorers"
             category="goals"
-            seasonId={seasonId}
+            seasonId={seasonId!}
           />
           <SeasonStatCard
             title="Top Assists"
             category="assists"
-            seasonId={seasonId}
+            seasonId={seasonId!}
           />
           <SeasonStatCard
             title="Total Passes"
             category="passes"
-            seasonId={seasonId}
+            seasonId={seasonId!}
           />
           <SeasonStatCard
             title="Clean Sheets"
             category="cleanSheets"
-            seasonId={seasonId}
+            seasonId={seasonId!}
           />
           <SeasonStatCard
             title="Top Rated"
             category="overall"
-            seasonId={seasonId}
+            seasonId={seasonId!}
           />
         </div>
       </section>

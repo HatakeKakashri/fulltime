@@ -1,4 +1,5 @@
-import { useParams, useNavigate } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
+import { skipToken } from "@tanstack/react-query";
 import { trpc } from "../trpc/client";
 
 export function TeamPage() {
@@ -7,15 +8,13 @@ export function TeamPage() {
 
   // Fetch team squad data
   const { data, isLoading, error } = trpc.club.squad.useQuery(
-    { clubId: teamId ?? "" },
-    { enabled: !!teamId }
+    teamId ? { clubId: teamId } : skipToken
   );
 
   // Fetch starting XI for the team
   const { data: startingXIData, isLoading: xiLoading } =
     trpc.team.startingXI.useQuery(
-      { clubId: teamId ?? "" },
-      { enabled: !!teamId }
+      teamId ? { clubId: teamId } : skipToken
     );
 
   if (isLoading || xiLoading) {
@@ -44,14 +43,12 @@ export function TeamPage() {
     <div className="space-y-8">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-sm text-slate-500">
-        <button
-          onClick={() => navigate("/")}
-          className="hover:text-slate-700 transition-colors"
-        >
+        <Link to="/" className="hover:text-slate-700 transition-colors">
           Home
-        </button>
+        </Link>
         <span>›</span>
         <button
+          type="button"
           onClick={() => navigate(-1)}
           className="hover:text-slate-700 transition-colors"
         >

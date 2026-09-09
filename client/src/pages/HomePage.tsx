@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { trpc } from "../trpc/client";
 
 export function HomePage() {
@@ -66,9 +66,9 @@ export function HomePage() {
       <section className="bg-white rounded-lg shadow p-6">
         <h2 className="text-lg font-semibold text-slate-900 mb-4">Current Season</h2>
         {currentSeason ? (
-          <div
-            className="flex items-center justify-between p-4 bg-blue-50 rounded-lg cursor-pointer hover:bg-blue-100 transition-colors"
-            onClick={() => navigate(`/league/${currentSeason.id}`)}
+          <Link
+            to={`/league/${currentSeason.id}`}
+            className="flex items-center justify-between p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors no-underline"
           >
             <div>
               <p className="font-medium text-slate-900">
@@ -87,6 +87,7 @@ export function HomePage() {
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
+                    e.preventDefault();
                     if (confirm("Mark this season as completed?")) {
                       markCompletedMutation.mutate();
                     }
@@ -99,7 +100,7 @@ export function HomePage() {
               )}
               <span className="text-blue-600 text-sm font-medium">View League →</span>
             </div>
-          </div>
+          </Link>
         ) : (
           <div className="text-center py-8">
             <p className="text-slate-500 mb-4">No active season</p>
@@ -126,10 +127,10 @@ export function HomePage() {
         {previousSeasons.length > 0 ? (
           <div className="space-y-2">
             {previousSeasons.map((season) => (
-              <div
+              <Link
                 key={season.id}
-                className="flex items-center justify-between p-3 bg-slate-50 rounded-lg cursor-pointer hover:bg-slate-100 transition-colors"
-                onClick={() => navigate(`/league/${season.id}`)}
+                to={`/league/${season.id}`}
+                className="flex items-center justify-between p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors no-underline"
               >
                 <div>
                   <p className="font-medium text-slate-900">
@@ -145,7 +146,7 @@ export function HomePage() {
                   </span>
                   <span className="text-slate-400 text-sm">→</span>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         ) : (
