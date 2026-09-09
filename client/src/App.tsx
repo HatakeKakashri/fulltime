@@ -5,7 +5,7 @@ import { LeaguePage } from "./pages/LeaguePage";
 import { TeamPage } from "./pages/TeamPage";
 import { MatchDetailPage } from "./pages/MatchDetailPage";
 import { ClubSquadPage } from "./pages/ClubSquadPage";
-import { FixturesPage } from "./pages/FixturesPage";
+import { SettingsMenu } from "./components/SettingsMenu";
 
 function NavItem({
   to,
@@ -55,7 +55,7 @@ export function App() {
             </span>
             <div className="ml-auto flex items-center gap-4">
               <NavItem to="/" label="Home" />
-              <NavItem to="/fixtures" label="Fixtures" />
+              <SettingsMenu />
             </div>
           </nav>
           <main className="p-4">
@@ -63,7 +63,6 @@ export function App() {
               <Route path="/" element={<HomePage />} />
               <Route path="/league/:seasonId" element={<LeaguePage />} />
               <Route path="/team/:teamId" element={<TeamPage />} />
-              <Route path="/fixtures" element={<FixturesPage />} />
               <Route path="/match/:matchId" element={<MatchDetailPage />} />
               <Route path="/club/:clubId" element={<ClubSquadPage />} />
               <Route path="*" element={<NotFound />} />
