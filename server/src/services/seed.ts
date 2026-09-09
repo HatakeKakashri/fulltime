@@ -11,19 +11,75 @@ export interface SeedResult {
   fixtureCount: number;
 }
 
+/**
+ * Find the current season (most recent non-COMPLETED season).
+ */
+async function findCurrentSeason() {
+  return prisma.season.findFirst({
+    where: { status: { not: "COMPLETED" } },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+/**
+ * Delete only the current season's data (respecting FK ordering).
+ * COMPLETED seasons are preserved.
+ */
+async function deleteCurrentSeasonData(seasonId: string): Promise<void> {
+  // Delete in FK-safe order
+  await prisma.startingXI.deleteMany({
+    where: { club: { seasonId } },
+  });
+  await prisma.match.deleteMany({
+    where: { fixture: { matchday: { seasonId } } },
+  });
+  await prisma.fixture.deleteMany({
+    where: { matchday: { seasonId } },
+  });
+  await prisma.player.deleteMany({
+    where: { club: { seasonId } },
+  });
+  await prisma.club.deleteMany({
+    where: { seasonId },
+  });
+  await prisma.matchday.deleteMany({
+    where: { seasonId },
+  });
+  await prisma.season.delete({
+    where: { id: seasonId },
+  });
+}
+
+/**
+ * Calculate the next year for a new season.
+ * If no seasons exist, use current calendar year.
+ * Otherwise, use MAX(year) + 1.
+ */
+async function calculateNextYear(): Promise<number> {
+  const result = await prisma.season.aggregate({
+    _max: { year: true },
+  });
+  
+  const maxYear = result._max.year;
+  if (maxYear === null || maxYear === 0) {
+    return new Date().getFullYear();
+  }
+  return maxYear + 1;
+}
+
 export async function seedSeason(seed: number = 42): Promise<SeedResult> {
-  // Clean existing data (order respects foreign keys)
-  await prisma.startingXI.deleteMany();
-  await prisma.match.deleteMany();
-  await prisma.fixture.deleteMany();
-  await prisma.player.deleteMany();
-  await prisma.club.deleteMany();
-  await prisma.matchday.deleteMany();
-  await prisma.season.deleteMany();
+  // Find and delete only the current season's data
+  const currentSeason = await findCurrentSeason();
+  if (currentSeason) {
+    await deleteCurrentSeasonData(currentSeason.id);
+  }
+
+  // Calculate the next year
+  const year = await calculateNextYear();
 
   // Create season
   const season = await prisma.season.create({
-    data: { startDate: new Date(), status: "INITIALIZED" },
+    data: { startDate: new Date(), status: "INITIALIZED", year },
   });
 
   // Generate squads

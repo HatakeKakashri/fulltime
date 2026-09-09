@@ -140,7 +140,7 @@ export async function generateFixtures(seasonId: string): Promise<void> {
       matchdayId,
       homeClubId,
       awayClubId,
-      status: 'PENDING',
+      status: 'PENDING' as const,
       seed,
     };
   });
@@ -271,14 +271,14 @@ export async function simulateNextMatchday(
       data: { status: 'SIMULATED' },
     });
 
-    // Check if this was the last matchday — transition season to COMPLETED
+    // Check if this was the last matchday — transition season to SIMULATED (not COMPLETED)
     const remaining = await tx.matchday.count({
       where: { seasonId, status: 'PENDING' },
     });
     if (remaining === 0) {
       await tx.season.update({
         where: { id: seasonId },
-        data: { status: 'COMPLETED' },
+        data: { status: 'SIMULATED' },
       });
     }
 
