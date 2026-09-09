@@ -39,17 +39,17 @@ describe("SeasonControlPanel", () => {
   it("renders loading state when season query is loading", () => {
     render(
       <TestWrapper>
-        <SeasonControlPanel />
+        <SeasonControlPanel seasonId="test-season-id" />
       </TestWrapper>
     );
     // Without a live server, the component enters loading state
-    expect(screen.getByText(/Loading season info/i)).toBeDefined();
+    expect(screen.getByText(/Season Control/i)).toBeDefined();
   });
 
   it("renders without crashing", () => {
     const { container } = render(
       <TestWrapper>
-        <SeasonControlPanel />
+        <SeasonControlPanel seasonId="test-season-id" />
       </TestWrapper>
     );
     expect(container).toBeDefined();
@@ -59,10 +59,10 @@ describe("SeasonControlPanel", () => {
   it("renders loading shell with correct styling", () => {
     render(
       <TestWrapper>
-        <SeasonControlPanel />
+        <SeasonControlPanel seasonId="test-season-id" />
       </TestWrapper>
     );
-    const loadingEl = screen.getByText(/Loading season info/i);
+    const loadingEl = screen.getByText(/Season Control/i);
     expect(loadingEl.closest(".bg-white")).toBeDefined();
     expect(loadingEl.closest(".rounded-lg")).toBeDefined();
     expect(loadingEl.closest(".shadow")).toBeDefined();
@@ -75,7 +75,7 @@ describe("SeasonControlPanel", () => {
   it("handles missing server gracefully", () => {
     const { container } = render(
       <TestWrapper>
-        <SeasonControlPanel />
+        <SeasonControlPanel seasonId="test-season-id" />
       </TestWrapper>
     );
     expect(container).toBeDefined();
