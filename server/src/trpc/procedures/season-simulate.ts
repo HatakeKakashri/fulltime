@@ -91,8 +91,31 @@ async function requireCurrentSeason(prisma: any) {
 }
 
 /**
+ * Require a season that can be simulated (not COMPLETED or SIMULATED).
+ */
+async function requireSimulatableSeason(prisma: any) {
+  const season = await requireCurrentSeason(prisma);
+  
+  if (season.status === "SIMULATED") {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Season is SIMULATED and awaiting completion. Use markCompleted first.",
+    });
+  }
+  
+  if (season.status === "COMPLETED") {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Season is already completed.",
+    });
+  }
+  
+  return season;
+}
+
+/**
  * Derive the expected season status after a matchday simulation.
- * COMPLETED when no pending matchdays remain, IN_PROGRESS otherwise.
+ * SIMULATED when no pending matchdays remain, IN_PROGRESS otherwise.
  */
 async function deriveExpectedSeasonStatus(
   prisma: any,
@@ -101,7 +124,7 @@ async function deriveExpectedSeasonStatus(
   const remaining = await prisma.matchday.count({
     where: { seasonId, status: "PENDING" },
   });
-  return remaining === 0 ? "COMPLETED" : "IN_PROGRESS";
+  return remaining === 0 ? "SIMULATED" : "IN_PROGRESS";
 }
 
 /**
@@ -139,14 +162,14 @@ const OutputSchema = z.object({
       matchId: z.string(),
     })
   ),
-  seasonStatus: z.enum(["IN_PROGRESS", "COMPLETED"]),
+  seasonStatus: z.enum(["IN_PROGRESS", "SIMULATED", "COMPLETED"]),
   validationReport: ValidationReportSchema,
 });
 
 const FullSeasonOutputSchema = z.object({
   totalMatchdays: z.number(),
   totalFixtures: z.number(),
-  finalSeasonStatus: z.enum(["INITIALIZED", "IN_PROGRESS", "COMPLETED"]),
+  finalSeasonStatus: z.enum(["INITIALIZED", "IN_PROGRESS", "SIMULATED", "COMPLETED"]),
   validationReport: z.array(ValidationReportSchema),
 });
 
@@ -155,14 +178,7 @@ const FullSeasonOutputSchema = z.object({
 export const seasonSimulateNextMatchday = publicProcedure
   .output(OutputSchema)
   .mutation(async ({ ctx }) => {
-    const season = await requireCurrentSeason(ctx.prisma);
-
-    if (season.status === "COMPLETED") {
-      throw new TRPCError({
-        code: "NOT_FOUND",
-        message: "Season is already completed",
-      });
-    }
+    const season = await requireSimulatableSeason(ctx.prisma);
 
     const result = await simulateNextMatchdayService(season.id);
 
@@ -189,7 +205,7 @@ export const seasonSimulateNextMatchday = publicProcedure
       matchdayIndex: result.index,
       fixtureCount: result.fixtureCount,
       results: result.results,
-      seasonStatus: actualStatus as "IN_PROGRESS" | "COMPLETED",
+      seasonStatus: actualStatus as "IN_PROGRESS" | "SIMULATED" | "COMPLETED",
       validationReport,
     };
   });
@@ -199,16 +215,7 @@ export const seasonSimulateNextMatchday = publicProcedure
 export const seasonSimulateFullSeason = publicProcedure
   .output(FullSeasonOutputSchema)
   .mutation(async ({ ctx }) => {
-    const season = await requireCurrentSeason(ctx.prisma);
-
-    if (season.status === "COMPLETED") {
-      return {
-        totalMatchdays: 0,
-        totalFixtures: 0,
-        finalSeasonStatus: "COMPLETED" as const,
-        validationReport: [],
-      };
-    }
+    const season = await requireSimulatableSeason(ctx.prisma);
 
     let totalMatchdays = 0;
     let totalFixtures = 0;
@@ -253,7 +260,7 @@ export const seasonSimulateFullSeason = publicProcedure
     return {
       totalMatchdays,
       totalFixtures,
-      finalSeasonStatus: finalStatus as "INITIALIZED" | "IN_PROGRESS" | "COMPLETED",
+      finalSeasonStatus: finalStatus as "INITIALIZED" | "IN_PROGRESS" | "SIMULATED" | "COMPLETED",
       validationReport: validationReports,
     };
   });
