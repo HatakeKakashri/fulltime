@@ -4,8 +4,11 @@
 Single-league football club management simulation (MVP), structurally modeled on *Top Eleven — Be a Football Manager*. The current build phase validates core simulation and economy systems with all 20 clubs bot-controlled — there is no human manager yet. Human manager control, live match playback, scheduled multiplayer, and league promotion/relegation are planned for post-MVP and are intentionally out of scope for this spec set.
 
 ## MVP Scope Summary
-- 20 clubs, single division, full home/away round robin (380 matches/season), no promotion/relegation, no result-based rewards or penalties.
+- 20 clubs, single division, full home/away round robin (380 matches/season).
 - Deterministic, event-based, probabilistic match simulation — server-authoritative, result-only client delivery.
+- Persistent clubs and players across seasons, decoupled from seasonal state.
+- 14-position model (GK, DL, DC, DR, DML, DMC, DMR, ML, MC, MR, AML, AMC, AMR, ST).
+- Full 25-attribute Top-Eleven player profile model (Attack, Defense, Physical, Goalkeeping).
 - Web client across mobile/tablet/laptop/desktop, functioning as a read-only observation dashboard (no accounts/auth in MVP).
 
 ## Explicitly Out of Scope (this spec set)
@@ -15,10 +18,8 @@ Single-league football club management simulation (MVP), structurally modeled on
 - Multi-tier league hierarchy with promotion/relegation
 - Any monetization or real-money currency path
 - Parallel match simulation
-- Pause functionality in live matches (ruled out permanently, not just deferred)
-- Transfer market, bot transfer decision-making, and token economy (removed from MVP scope — single-season league simulation only)
-
-Where any of the above is referenced elsewhere in this spec set, treat it as forward-compatibility guidance for future architecture only — it is not specified in detail here.
+- Transfer market, bot transfer decision-making, and token economy (removed from MVP scope)
+- Live attribute progression / skill decay within a season (attributes are frozen per season)
 
 ## Tech Stack & Conventions
 - **Language**: TypeScript everywhere (server + client)
@@ -30,16 +31,12 @@ Where any of the above is referenced elsewhere in this spec set, treat it as for
 - **Frontend**: React + Vite + Tailwind CSS
 - **Testing**: Bun's built-in test runner (Jest-compatible API)
 - **Determinism**: seeded PRNG (e.g. mulberry32/xorshift) for all match simulation — never `Math.random()` in simulation code paths
-- **Delivery model**: solo developer, AI-assisted workflow; MVP runs entirely locally with zero hosting budget
 
 ## Capabilities in This Spec Set
 | Capability | Covers |
 |---|---|
-| `season-scheduling` | League structure, round-robin fixture generation, matchday sequencing |
-| `match-simulation` | Deterministic event-based match engine |
-| `web-client-delivery` | Client platform and server-authoritative boundary |
-| `squad-initialization` | Initial squad/player generation |
-| `starting-xi-selection` | Automatic lineup selection |
+| `core-schema` | The underlying data model supporting persistent identity and season-scoped attributes, including the 14-position system and 25 attributes. |
+| `match-simulation` | The two-layer deterministic event-based match engine (Possession split -> Category-resolved events). |
 
 ## Spec Conventions
 - Requirements use RFC 2119 keywords (SHALL, MUST).
