@@ -11,6 +11,12 @@ import { MATCHDAYS_PER_SEASON } from "../../config/league";
  * status (PENDING / SIMULATED). Sorted by matchday index then fixture id
  * for deterministic ordering.
  *
+ * Club names are resolved through the Fixture's home/away Club relations.
+ * The new schema makes Club persistent across seasons, so ClubSeason rows
+ * only need to be consulted when the procedure needs a season-scoped view
+ * (e.g., custom rebranding per season); for the current league view the
+ * direct Club name is the source of truth.
+ *
  * Errors:
  *   - NOT_FOUND — unknown seasonId
  *   - NOT_FOUND — `matchdayIndex` out of range for the season

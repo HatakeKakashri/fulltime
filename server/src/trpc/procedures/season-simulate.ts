@@ -79,6 +79,7 @@ async function validateMatchday(
 
 async function requireCurrentSeason(prisma: any) {
   const season = await prisma.season.findFirst({
+    where: { status: { not: "COMPLETED" } },
     orderBy: { createdAt: "desc" },
   });
   if (!season) {

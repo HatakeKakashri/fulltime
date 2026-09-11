@@ -6,11 +6,15 @@ import { publicProcedure } from "../init";
  * `league.seasonStats` — returns top 10 players per stat category for a season.
  * Categories: goals, assists, passes, cleanSheets, overall
  *
- * NOTE: The "overall" category currently returns base overallRating
- * (set at squad creation). This is intended to be derived from match-level
- * player stats once that data becomes available.
+ * Derives stats from match event logs stored in `Match.eventLogJson`. The
+ * event logs reference `Player.id` values; for each referenced player we
+ * resolve the matching `PlayerSeason` row in the requested season so we
+ * have their current clubId (the event log's `teamId` is the Club.id),
+ * position (for GK filtering), and overallRating.
  *
- * Derives stats from match event logs stored in `Match.eventLogJson`.
+ * NOTE: The "overall" category returns base overallRating (set at squad
+ * creation / copy-forward at rollover). This is intended to be derived
+ * from match-level player stats once that data becomes available.
  *
  * Errors:
  *   - NOT_FOUND — unknown seasonId
@@ -69,7 +73,8 @@ export const leagueSeasonStats = publicProcedure
       throw new TRPCError({ code: "NOT_FOUND", message: "Season not found" });
     }
 
-    // Fetch all completed matches for this season
+    // Fetch all completed matches for this season. Event logs reference
+    // Player.id and Club.id (no season scope on those tables).
     const matches = await ctx.prisma.match.findMany({
       where: {
         fixture: { matchday: { seasonId: input.seasonId } },
@@ -82,43 +87,44 @@ export const leagueSeasonStats = publicProcedure
           select: {
             homeClubId: true,
             awayClubId: true,
-            homeClub: { select: { name: true } },
-            awayClub: { select: { name: true } },
           },
         },
       },
     });
 
-    // Fetch all players in this season for name resolution
-    const clubs = await ctx.prisma.club.findMany({
+    // Fetch all PlayerSeason rows for this season. Joined to:
+    //   - Player (for the player's persistent name)
+    //   - ClubSeason → Club (for the club's name)
+    // so each PlayerSeason is fully resolved.
+    const playerSeasons = await ctx.prisma.playerSeason.findMany({
       where: { seasonId: input.seasonId },
       select: {
-        id: true,
-        name: true,
-        players: {
-          select: {
-            id: true,
-            name: true,
-            positionGroup: true,
-            overallRating: true,
-          },
+        playerId: true,
+        clubId: true,
+        position: true,
+        overallRating: true,
+        player: { select: { id: true, name: true } },
+        clubSeason: {
+          select: { club: { select: { id: true, name: true } } },
         },
       },
     });
 
-    const playersById = new Map<string, { name: string; clubName: string; positionGroup: string; overallRating: number }>();
+    const playerInfoById = new Map<
+      string,
+      { name: string; clubName: string; clubId: string; position: string; overallRating: number }
+    >();
     const clubNameById = new Map<string, string>();
 
-    for (const club of clubs) {
-      clubNameById.set(club.id, club.name);
-      for (const player of club.players) {
-        playersById.set(player.id, {
-          name: player.name,
-          clubName: club.name,
-          positionGroup: player.positionGroup,
-          overallRating: player.overallRating,
-        });
-      }
+    for (const ps of playerSeasons) {
+      playerInfoById.set(ps.player.id, {
+        name: ps.player.name,
+        clubName: ps.clubSeason.club.name,
+        clubId: ps.clubId,
+        position: ps.position,
+        overallRating: ps.overallRating,
+      });
+      clubNameById.set(ps.clubSeason.club.id, ps.clubSeason.club.name);
     }
 
     // Aggregate stats based on category
@@ -203,8 +209,8 @@ export const leagueSeasonStats = publicProcedure
 
           case "cleanSheets": {
             // Only count for goalkeepers
-            const playerInfo = playersById.get(event.playerId);
-            if (playerInfo && playerInfo.positionGroup === "GK") {
+            const playerInfo = playerInfoById.get(event.playerId);
+            if (playerInfo && playerInfo.position === "GK") {
               const isHome = event.teamId === homeClubId;
               const goalsConceded = isHome ? homeGoalsConceded : awayGoalsConceded;
               // Count 1 clean sheet if team conceded 0 goals
@@ -220,7 +226,7 @@ export const leagueSeasonStats = publicProcedure
             // base overallRating. Currently falls back to squad-creation
             // overallRating until per-match player stats are tracked.
             // Replace with derived match ratings when available.
-            const info = playersById.get(event.playerId);
+            const info = playerInfoById.get(event.playerId);
             if (info && !statsMap.has(event.playerId)) {
               statsMap.set(event.playerId, {
                 playerId: event.playerId,
@@ -236,7 +242,7 @@ export const leagueSeasonStats = publicProcedure
     const statsArray: PlayerStat[] = [];
 
     for (const [, stat] of statsMap) {
-      const playerInfo = playersById.get(stat.playerId);
+      const playerInfo = playerInfoById.get(stat.playerId);
       if (playerInfo) {
         statsArray.push({
           playerId: stat.playerId,

@@ -11,13 +11,21 @@ import { MATCH_EVENT_TYPE } from "../../lib/constants/match-event-type";
  * any other status (including the legacy lowercase "completed" rows that
  * pre-existed the casing reconciliation in task 4.1).
  *
- * Includes `homeClubName` and `awayClubName` by resolving the fixture's
- * club IDs against the Club table, so the client can render a meaningful
- * scoreboard instead of truncated UUIDs.
+ * Resolves the match's fixture → matchday → seasonId, then loads the
+ * PlayerSeason rows for both fixture clubs in that season. Match stats
+ * are the four category averages (attack / defense / physical /
+ * goalkeeping) computed from those PlayerSeason attributes.
  *
  * Errors:
  *   - NOT_FOUND — unknown matchId OR row exists but status != COMPLETED
  */
+
+function meanOrNull(values: Array<number | null | undefined>): number {
+  const xs = values.filter((v): v is number => typeof v === "number");
+  if (xs.length === 0) return 0;
+  return xs.reduce((a, b) => a + b, 0) / xs.length;
+}
+
 const InputSchema = z.object({
   matchId: z.string().uuid(),
 });
@@ -31,12 +39,12 @@ const MatchEventSchema = z.object({
   playerName: z.string().optional(),
 });
 
+// Per-team category averages computed from the squad's PlayerSeason rows.
 const StatsSchema = z.object({
-  shots: z.number(),
-  shotsOnTarget: z.number(),
-  corners: z.number(),
-  fouls: z.number(),
-  yellowCards: z.number(),
+  attack: z.number(),
+  defense: z.number(),
+  physical: z.number(),
+  goalkeeping: z.number(),
 });
 
 const MatchViewSchema = z.object({
@@ -62,44 +70,53 @@ const OutputSchema = z.object({
 });
 
 /**
- * Aggregate per-team event counts from a parsed match event log.
+ * Compute category averages for a team from its PlayerSeason rows.
  *
- * Derived counters:
- *   - shots / shotsOnTarget (shot_attempt with outcome goal|saved)
- *   - corners (corner)
- *   - fouls / yellowCards (foul with outcome yellow_card)
+ * - attackAvg = mean(shooting, finishing, crossing, dribbling, passing)
+ * - defenseAvg = mean(tackling, marking, positioning, heading, bravery)
+ * - physicalAvg = mean(fitness, strength, aggression, speed, creativity)
+ * - gkAvg = mean(10 GK attrs)
+ *
+ * For outfield players the 10 GK attrs are null (skipped); for the GK
+ * the 10 outfield attrs are null. So attack/defense/gk averages are
+ * computed only over the rows whose category actually populates those
+ * slots. Physical is non-null for everyone.
  */
-function computeMatchStats(
-  eventLog: z.infer<typeof MatchEventSchema>[],
-  homeClubId: string,
-  awayClubId: string
+function computeCategoryAverages(
+  rows: Array<{
+    shooting: number | null;
+    finishing: number | null;
+    crossing: number | null;
+    dribbling: number | null;
+    passing: number | null;
+    tackling: number | null;
+    marking: number | null;
+    positioning: number | null;
+    heading: number | null;
+    bravery: number | null;
+    fitness: number;
+    strength: number;
+    aggression: number;
+    speed: number;
+    creativity: number;
+    reflexes: number | null;
+    agility: number | null;
+    anticipation: number | null;
+    rushingOut: number | null;
+    communication: number | null;
+    throwing: number | null;
+    kicking: number | null;
+    punching: number | null;
+    aerialReach: number | null;
+    concentration: number | null;
+  }>
 ) {
-  const stats = {
-    home: { shots: 0, shotsOnTarget: 0, corners: 0, fouls: 0, yellowCards: 0 },
-    away: { shots: 0, shotsOnTarget: 0, corners: 0, fouls: 0, yellowCards: 0 },
+  return {
+    attack: meanOrNull(rows.flatMap((r) => [r.shooting, r.finishing, r.crossing, r.dribbling, r.passing])),
+    defense: meanOrNull(rows.flatMap((r) => [r.tackling, r.marking, r.positioning, r.heading, r.bravery])),
+    physical: meanOrNull(rows.flatMap((r) => [r.fitness, r.strength, r.aggression, r.speed, r.creativity])),
+    goalkeeping: meanOrNull(rows.flatMap((r) => [r.reflexes, r.agility, r.anticipation, r.rushingOut, r.communication, r.throwing, r.kicking, r.punching, r.aerialReach, r.concentration])),
   };
-
-  for (const event of eventLog) {
-    const side = event.teamId === homeClubId ? "home" : "away";
-    switch (event.type) {
-      case "shot_attempt":
-        stats[side].shots++;
-        if (event.outcome === "goal" || event.outcome === "saved") {
-          stats[side].shotsOnTarget++;
-        }
-        break;
-      case "corner":
-        stats[side].corners++;
-        break;
-      case "foul":
-        stats[side].fouls++;
-        if (event.outcome === "yellow_card") {
-          stats[side].yellowCards++;
-        }
-        break;
-    }
-  }
-  return stats;
 }
 
 export const matchResult = publicProcedure
@@ -116,6 +133,7 @@ export const matchResult = publicProcedure
           select: {
             homeClubId: true,
             awayClubId: true,
+            matchday: { select: { seasonId: true } },
           },
         },
       },
@@ -128,17 +146,64 @@ export const matchResult = publicProcedure
       });
     }
 
-    // Resolve club names from the fixture's club IDs
+    const { homeClubId, awayClubId, matchday } = match.fixture;
+    const seasonId = matchday.seasonId;
+
+    // Resolve club names from the fixture's club IDs.
     const [homeClub, awayClub] = await Promise.all([
       ctx.prisma.club.findUnique({
-        where: { id: match.fixture.homeClubId },
+        where: { id: homeClubId },
         select: { name: true },
       }),
       ctx.prisma.club.findUnique({
-        where: { id: match.fixture.awayClubId },
+        where: { id: awayClubId },
         select: { name: true },
       }),
     ]);
+
+    // Load PlayerSeason rows for both fixture clubs in the match's season
+    // so we can derive category-average stats.
+    const playerSeasons = await ctx.prisma.playerSeason.findMany({
+      where: {
+        seasonId,
+        clubId: { in: [homeClubId, awayClubId] },
+      },
+      select: {
+        clubId: true,
+        shooting: true,
+        finishing: true,
+        crossing: true,
+        dribbling: true,
+        passing: true,
+        tackling: true,
+        marking: true,
+        positioning: true,
+        heading: true,
+        bravery: true,
+        fitness: true,
+        strength: true,
+        aggression: true,
+        speed: true,
+        creativity: true,
+        reflexes: true,
+        agility: true,
+        anticipation: true,
+        rushingOut: true,
+        communication: true,
+        throwing: true,
+        kicking: true,
+        punching: true,
+        aerialReach: true,
+        concentration: true,
+      },
+    });
+
+    const homeRows = playerSeasons.filter((ps) => ps.clubId === homeClubId);
+    const awayRows = playerSeasons.filter((ps) => ps.clubId === awayClubId);
+    const stats = {
+      home: computeCategoryAverages(homeRows),
+      away: computeCategoryAverages(awayRows),
+    };
 
     let eventLog: z.infer<typeof MatchEventSchema>[] = [];
     try {
@@ -151,7 +216,9 @@ export const matchResult = publicProcedure
       eventLog = [];
     }
 
-    // Resolve player names for event log
+    // Resolve player names for event log entries. Events reference
+    // Player.id (the persistent identity), which matches across
+    // PlayerSeason rows.
     const playerIds = [...new Set(eventLog.map((e) => e.playerId))];
     const players = playerIds.length > 0
       ? await ctx.prisma.player.findMany({
@@ -165,20 +232,14 @@ export const matchResult = publicProcedure
       playerName: playerNameMap.get(e.playerId) ?? e.playerId,
     }));
 
-    const stats = computeMatchStats(
-      eventLog,
-      match.fixture.homeClubId,
-      match.fixture.awayClubId
-    );
-
     return {
       match: {
         id: match.id,
         fixtureId: match.fixtureId,
-        homeClubId: match.fixture.homeClubId,
-        awayClubId: match.fixture.awayClubId,
-        homeClubName: homeClub?.name ?? match.fixture.homeClubId,
-        awayClubName: awayClub?.name ?? match.fixture.awayClubId,
+        homeClubId,
+        awayClubId,
+        homeClubName: homeClub?.name ?? homeClubId,
+        awayClubName: awayClub?.name ?? awayClubId,
         homeScore: match.homeScore,
         awayScore: match.awayScore,
         eventLog,

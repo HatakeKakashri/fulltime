@@ -11,9 +11,13 @@ import {
 /**
  * `league.standings` — derived standings table for a season.
  *
- * Pure derivation: pulls completed matches + clubs for the season from
- * Prisma, runs `deriveStandings` (no persisted standings table), and
- * returns the sorted 20-row table.
+ * Pure derivation: pulls completed matches + ClubSeason→Club names for
+ * the season from Prisma, runs `deriveStandings` (no persisted standings
+ * table), and returns the sorted 20-row table.
+ *
+ * Club names are resolved by joining each `ClubSeason` to its persistent
+ * `Club` row (clubs are no longer directly season-scoped in the new
+ * schema).
  *
  * Errors:
  *   - NOT_FOUND — unknown seasonId
@@ -38,7 +42,7 @@ export const leagueStandings = publicProcedure
       throw new TRPCError({ code: "NOT_FOUND", message: "Season not found" });
     }
 
-    const [matches, clubs] = await Promise.all([
+    const [matches, clubSeasons] = await Promise.all([
       ctx.prisma.match.findMany({
         where: {
           status: "COMPLETED",
@@ -52,9 +56,13 @@ export const leagueStandings = publicProcedure
           fixture: { select: { homeClubId: true, awayClubId: true } },
         },
       }),
-      ctx.prisma.club.findMany({
+      // Resolve club names through ClubSeason → Club.
+      ctx.prisma.clubSeason.findMany({
         where: { seasonId: input.seasonId },
-        select: { id: true, name: true },
+        select: {
+          clubId: true,
+          club: { select: { id: true, name: true } },
+        },
       }),
     ]);
 
@@ -65,7 +73,10 @@ export const leagueStandings = publicProcedure
       awayScore: m.awayScore,
       status: m.status,
     }));
-    const clubLikes: ClubLike[] = clubs.map((c) => ({ id: c.id, name: c.name }));
+    const clubLikes: ClubLike[] = clubSeasons.map((cs) => ({
+      id: cs.club.id,
+      name: cs.club.name,
+    }));
 
     const rows = deriveStandings(completedMatches, clubLikes);
 

@@ -1,34 +1,42 @@
 import { z } from "zod";
+import { Position } from "@prisma/client";
 import { prisma } from "../db";
 import { MVP_FORMATION } from "../lib/constants/formation";
+import { getCurrentSeasonId } from "./seed";
 
-const PlayerIdsSchema = z.array(z.string().uuid()).length(11);
+const PlayerIdsSchema = z
+  .array(z.string().uuid())
+  .length(MVP_FORMATION.totalSlots);
 
 /**
- * Select the best starting XI for a club based on MVP_FORMATION slots.
- * Groups players by positionGroup, sorts by overallRating DESC, takes top N per slot.
+ * Select the best starting XI for a club in a given season based on MVP_FORMATION slots.
+ * Filters PlayerSeason rows by exact `position`, sorts by `overallRating` DESC, takes top N per slot.
  */
-export async function selectStartingXI(clubId: string): Promise<string[]> {
-  const players = await prisma.player.findMany({
-    where: { clubId },
-    select: { id: true, positionGroup: true, overallRating: true },
+export async function selectStartingXI(
+  clubId: string,
+  seasonId: string
+): Promise<string[]> {
+  const playerSeasons = await prisma.playerSeason.findMany({
+    where: { clubId, seasonId },
+    select: { playerId: true, position: true, overallRating: true },
   });
 
-  if (players.length < MVP_FORMATION.totalSlots) {
+  if (playerSeasons.length < MVP_FORMATION.totalSlots) {
     throw new Error(
-      `Club ${clubId} has only ${players.length} players, need at least ${MVP_FORMATION.totalSlots} for a starting XI.`
+      `Club ${clubId} has only ${playerSeasons.length} players, need at least ${MVP_FORMATION.totalSlots} for a starting XI.`
     );
   }
 
-  // Group players by positionGroup
-  const grouped: Record<string, { id: string; overallRating: number }[]> = {};
+  // Group players by exact position (Position enum)
+  const grouped: Partial<Record<Position, { id: string; overallRating: number }[]>> = {};
   for (const slot of MVP_FORMATION.slots) {
-    grouped[slot.positionGroup] = [];
+    grouped[slot.position] = [];
   }
 
-  for (const player of players) {
-    if (grouped[player.positionGroup]) {
-      grouped[player.positionGroup].push(player);
+  for (const player of playerSeasons) {
+    const bucket = grouped[player.position];
+    if (bucket) {
+      bucket.push({ id: player.playerId, overallRating: player.overallRating });
     }
   }
 
@@ -36,11 +44,11 @@ export async function selectStartingXI(clubId: string): Promise<string[]> {
   const selectedIds: string[] = [];
 
   for (const slot of MVP_FORMATION.slots) {
-    const group = grouped[slot.positionGroup];
+    const group = grouped[slot.position];
 
-    if (group.length < slot.count) {
+    if (!group || group.length < slot.count) {
       throw new Error(
-        `Club ${clubId} has only ${group.length} ${slot.positionGroup} players, need ${slot.count} for MVP formation.`
+        `Club ${clubId} has only ${group?.length ?? 0} ${slot.position} players, need ${slot.count} for MVP formation.`
       );
     }
 
@@ -55,21 +63,24 @@ export async function selectStartingXI(clubId: string): Promise<string[]> {
 }
 
 /**
- * Save (upsert) the starting XI for a club.
+ * Save (upsert) the starting XI for a club in a season.
+ * Scoped by ClubSeason composite key (clubId, seasonId).
  */
 export async function saveStartingXI(
   clubId: string,
+  seasonId: string,
   playerIds: string[]
 ): Promise<void> {
   PlayerIdsSchema.parse(playerIds);
   await prisma.startingXI.upsert({
-    where: { clubId },
+    where: { clubId_seasonId: { clubId, seasonId } },
     update: {
       playerIds,
       computedAt: new Date(),
     },
     create: {
       clubId,
+      seasonId,
       playerIds,
       computedAt: new Date(),
     },
@@ -77,34 +88,45 @@ export async function saveStartingXI(
 }
 
 /**
- * Recalculate and persist the starting XI for a single club.
+ * Recalculate and persist the starting XI for a single club in the current season.
  */
 export async function recalculateStartingXI(
   clubId: string
 ): Promise<string[]> {
-  const playerIds = await selectStartingXI(clubId);
-  await saveStartingXI(clubId, playerIds);
+  const seasonId = await getCurrentSeasonId();
+  if (!seasonId) {
+    throw new Error("No current season found");
+  }
+  const playerIds = await selectStartingXI(clubId, seasonId);
+  await saveStartingXI(clubId, seasonId, playerIds);
   return playerIds;
 }
 
 /**
- * Recalculate starting XIs for all clubs with enough players.
+ * Recalculate starting XIs for all clubs in the current season.
  */
 export async function recomputeAllStartingXIs(): Promise<void> {
-  const clubs = await prisma.club.findMany({
-    select: { id: true },
+  const seasonId = await getCurrentSeasonId();
+  if (!seasonId) {
+    return; // No current season — nothing to do
+  }
+
+  const clubSeasons = await prisma.clubSeason.findMany({
+    where: { seasonId },
+    select: { clubId: true },
   });
 
-  for (const club of clubs) {
-    const playerCount = await prisma.player.count({
-      where: { clubId: club.id },
+  for (const { clubId } of clubSeasons) {
+    const playerCount = await prisma.playerSeason.count({
+      where: { clubId, seasonId },
     });
 
     if (playerCount >= MVP_FORMATION.totalSlots) {
       try {
-        await recalculateStartingXI(club.id);
+        const playerIds = await selectStartingXI(clubId, seasonId);
+        await saveStartingXI(clubId, seasonId, playerIds);
       } catch {
-        // Skip clubs that fail selection (shouldn't happen if count >= 11, but guard anyway)
+        // Skip clubs that fail selection (shouldn't happen if count >= totalSlots, but guard anyway)
         continue;
       }
     }
@@ -112,13 +134,14 @@ export async function recomputeAllStartingXIs(): Promise<void> {
 }
 
 /**
- * Get the stored starting XI for a club. Returns null if none exists.
+ * Get the stored starting XI for a club in a season. Returns null if none exists.
  */
 export async function getStartingXI(
-  clubId: string
+  clubId: string,
+  seasonId: string
 ): Promise<string[] | null> {
   const row = await prisma.startingXI.findUnique({
-    where: { clubId },
+    where: { clubId_seasonId: { clubId, seasonId } },
     select: { playerIds: true },
   });
 
@@ -128,13 +151,14 @@ export async function getStartingXI(
 }
 
 /**
- * Check whether a specific player is in the club's current starting XI.
+ * Check whether a specific player is in the club's starting XI for a season.
  */
 export async function isPlayerInStartingXI(
   clubId: string,
+  seasonId: string,
   playerId: string
 ): Promise<boolean> {
-  const xi = await getStartingXI(clubId);
+  const xi = await getStartingXI(clubId, seasonId);
   if (!xi) return false;
   return xi.includes(playerId);
 }

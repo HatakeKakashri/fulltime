@@ -43,16 +43,19 @@ export interface MatchdayResult {
  *
  * Produces (n-1) * n/2 * 2 = n * (n-1) total fixtures.
  * For 20 clubs: 20 * 19 = 380 fixtures across 38 matchdays.
+ *
+ * Clubs are resolved through the ClubSeason composite key so the same clubId
+ * ordering is preserved across migration.
  */
 export async function generateFixtures(seasonId: string): Promise<void> {
-  // Get all clubs for this season
-  const clubs = await prisma.club.findMany({
+  // Resolve clubs via ClubSeason composite key for the given seasonId
+  const clubSeasons = await prisma.clubSeason.findMany({
     where: { seasonId },
-    select: { id: true },
-    orderBy: { id: 'asc' },
+    select: { clubId: true },
+    orderBy: { clubId: 'asc' },
   });
 
-  const n = clubs.length;
+  const n = clubSeasons.length;
   if (n < 2) {
     throw new Error(`Need at least 2 clubs to generate fixtures, got ${n}`);
   }
@@ -130,8 +133,8 @@ export async function generateFixtures(seasonId: string): Promise<void> {
   // Create fixture records with deterministic seeds
   const fixtureData = allRoundFixtures.map((f) => {
     const matchdayId = matchdayRecords[f.matchdayIndex - 1].id;
-    const homeClubId = clubs[f.homeClubIdx].id;
-    const awayClubId = clubs[f.awayClubIdx].id;
+    const homeClubId = clubSeasons[f.homeClubIdx].clubId;
+    const awayClubId = clubSeasons[f.awayClubIdx].clubId;
 
     // Deterministic seed: hash of season + matchday + fixture indices
     const seed = hashSeed(seasonId, f.matchdayIndex, f.homeClubIdx);
@@ -178,6 +181,10 @@ function hashSeed(
  * Simulate the next pending matchday for a season.
  * Finds the matchday with the lowest index that is still PENDING,
  * then simulates all fixtures sequentially.
+ *
+ * Each fixture's match simulation loads PlayerSeason rows for the home/away
+ * starting XI members so the match engine can compute category averages
+ * (attackAvg / defenseAvg / physicalAvg / gkAvg) from the 25 attributes.
  */
 export async function simulateNextMatchday(
   seasonId: string
@@ -228,17 +235,19 @@ export async function simulateNextMatchday(
       };
     }
 
-    // Deduplicate club IDs — each club only needs one XI check per matchday
+    // Deduplicate club IDs — each club only needs one XI check per matchday.
+    // StartingXI is keyed by (clubId, seasonId) so we pass seasonId through.
     const clubIds = [...new Set(fixtures.flatMap((f) => [f.homeClubId, f.awayClubId]))];
     for (const clubId of clubIds) {
-      await ensureStartingXI(clubId, tx);
+      await ensureStartingXI(clubId, seasonId, tx);
     }
 
     const results: MatchdayResult['results'] = [];
 
     // Sequential simulation — no parallelism
     for (const fixture of fixtures) {
-      // Simulate the match — Match creation is now inside the transaction via tx
+      // simulateMatch loads PlayerSeason rows for the starting XI inside its
+      // own implementation, so we don't pre-fetch them here.
       const match = await simulateMatch(fixture.id, tx);
 
       // Link match to fixture
@@ -292,12 +301,19 @@ export async function simulateNextMatchday(
 }
 
 /**
- * Ensure a club has a starting XI. Recalculate if missing.
+ * Ensure a club has a starting XI for the given season. Recalculate if missing.
+ *
+ * StartingXI is keyed by composite (clubId, seasonId) under the new schema,
+ * so the lookup and the recalculation must be season-scoped.
  */
-async function ensureStartingXI(clubId: string, tx: any): Promise<void> {
+async function ensureStartingXI(
+  clubId: string,
+  seasonId: string,
+  tx: any
+): Promise<void> {
   const xi = await tx.startingXI.findUnique({
-    where: { clubId },
-    select: { id: true },
+    where: { clubId_seasonId: { clubId, seasonId } },
+    select: { clubId: true },
   });
 
   if (!xi) {

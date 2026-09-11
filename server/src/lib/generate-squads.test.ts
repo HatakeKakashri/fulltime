@@ -1,5 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { generateSquads } from "./generate-squads";
+import { Position } from "@prisma/client";
 
 describe("generateSquads", () => {
   const seed = 12345;
@@ -15,16 +16,34 @@ describe("generateSquads", () => {
     }
   });
 
-  it("should have correct position distribution per club (2 GK, 6 DEF, 7 MID, 5 FWD)", () => {
+  it("should have correct position distribution per club", () => {
+    const expectedDistribution = {
+      [Position.GK]: 2,
+      [Position.DL]: 2,
+      [Position.DC]: 3,
+      [Position.DR]: 2,
+      [Position.ML]: 2,
+      [Position.MC]: 3,
+      [Position.MR]: 2,
+      [Position.ST]: 4,
+    };
     for (const club of league.clubs) {
-      const counts = { GK: 0, DEF: 0, MID: 0, FWD: 0 };
+      const counts: Record<Position, number> = {
+        GK: 0, DL: 0, DC: 0, DR: 0,
+        DML: 0, DMC: 0, DMR: 0, ML: 0, MC: 0, MR: 0,
+        AML: 0, AMC: 0, AMR: 0, ST: 0,
+      };
       for (const player of club.players) {
-        counts[player.positionGroup]++;
+        counts[player.position]++;
       }
-      expect(counts.GK).toBe(2);
-      expect(counts.DEF).toBe(6);
-      expect(counts.MID).toBe(7);
-      expect(counts.FWD).toBe(5);
+      expect(counts[Position.GK]).toBe(expectedDistribution[Position.GK]);
+      expect(counts[Position.DL]).toBe(expectedDistribution[Position.DL]);
+      expect(counts[Position.DC]).toBe(expectedDistribution[Position.DC]);
+      expect(counts[Position.DR]).toBe(expectedDistribution[Position.DR]);
+      expect(counts[Position.ML]).toBe(expectedDistribution[Position.ML]);
+      expect(counts[Position.MC]).toBe(expectedDistribution[Position.MC]);
+      expect(counts[Position.MR]).toBe(expectedDistribution[Position.MR]);
+      expect(counts[Position.ST]).toBe(expectedDistribution[Position.ST]);
     }
   });
 
@@ -42,11 +61,11 @@ describe("generateSquads", () => {
     const firstClub = league.clubs[0];
     const lastClub = league.clubs[19];
     if (!firstClub || !lastClub) throw new Error("Clubs not found");
-    // Compare first players' attack values across different clubs
-    const firstClubAttacks = firstClub.players.map((p) => p.attack);
-    const lastClubAttacks = lastClub.players.map((p) => p.attack);
+    // Compare first players' shooting values across different clubs
+    const firstClubShootings = firstClub.players.map((p) => p.shooting);
+    const lastClubShootings = lastClub.players.map((p) => p.shooting);
     // At least some attributes should differ between clubs due to different modifiers
-    const hasDifference = firstClubAttacks.some((a, i) => a !== lastClubAttacks[i]);
+    const hasDifference = firstClubShootings.some((a, i) => a !== lastClubShootings[i]);
     expect(hasDifference).toBe(true);
   });
 
@@ -60,5 +79,25 @@ describe("generateSquads", () => {
       ids.add(club.id);
     }
     expect(ids.size).toBe(20);
+  });
+
+  it("each player has correct nullability based on position", () => {
+    for (const club of league.clubs) {
+      for (const player of club.players) {
+        if (player.position === Position.GK) {
+          // GK: attack/defense null, physical non-null, goalkeeping non-null
+          expect(player.tackling).toBeNull();
+          expect(player.shooting).toBeNull();
+          expect(player.fitness).not.toBeNull();
+          expect(player.reflexes).not.toBeNull();
+        } else {
+          // Outfield: attack/defense non-null, physical non-null, goalkeeping null
+          expect(player.tackling).not.toBeNull();
+          expect(player.shooting).not.toBeNull();
+          expect(player.fitness).not.toBeNull();
+          expect(player.reflexes).toBeNull();
+        }
+      }
+    }
   });
 });

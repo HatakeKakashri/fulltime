@@ -1,18 +1,30 @@
 import { prisma } from '../db';
-import { getStartingXI } from './starting-xi';
 import { createPRNG } from '../lib/prng';
 import { MATCH_STATUS } from '../lib/constants/match-status';
 import type { MatchEventType } from '../lib/constants/match-event-type';
-import type { Match, Fixture, Player } from '@prisma/client';
+import type { Match, PlayerSeason } from '@prisma/client';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+/**
+ * Team snapshot built from a starting XI's PlayerSeason rows.
+ *
+ * Category averages are computed from the 25 PlayerSeason attributes:
+ *   - attackAvg  = mean of shooting/finishing/crossing/dribbling/passing
+ *                 (null for GK, so averaged over outfield players)
+ *   - defenseAvg = mean of tackling/marking/positioning/heading/bravery
+ *                 (null for GK, so averaged over outfield players)
+ *   - physicalAvg= mean of fitness/strength/aggression/speed/creativity
+ *                 (non-null for all positions)
+ *   - gkAvg      = mean of the 10 goalkeeping attributes
+ *                 (null for outfield, so averaged over goalkeepers only)
+ */
 export interface TeamSnapshot {
-  players: Player[];
-  attack: number;
-  defense: number;
-  passing: number;
-  goalkeeping: number;
+  players: PlayerSeason[];
+  attackAvg: number;
+  defenseAvg: number;
+  physicalAvg: number;
+  gkAvg: number;
 }
 
 export interface MatchEvent {
@@ -30,18 +42,62 @@ function average(values: number[]): number {
   return values.reduce((a, b) => a + b, 0) / values.length;
 }
 
+/**
+ * Build a TeamSnapshot from the PlayerSeason rows of a starting XI.
+ *
+ * Null attribute values are excluded from the per-category averages, so
+ * attackAvg / defenseAvg aggregate only outfield players' values while
+ * gkAvg aggregates only the goalkeeper's values.
+ */
 export function buildTeamSnapshot(
-  playerIds: string[],
-  allPlayers: Player[]
+  playerSeasons: PlayerSeason[]
 ): TeamSnapshot {
-  const players = allPlayers.filter((p) => playerIds.includes(p.id));
+  const attackValues: number[] = [];
+  const defenseValues: number[] = [];
+  const physicalValues: number[] = [];
+  const gkValues: number[] = [];
+
+  for (const ps of playerSeasons) {
+    // Attack attributes (null for GK)
+    if (ps.shooting != null) attackValues.push(ps.shooting);
+    if (ps.finishing != null) attackValues.push(ps.finishing);
+    if (ps.crossing != null) attackValues.push(ps.crossing);
+    if (ps.dribbling != null) attackValues.push(ps.dribbling);
+    if (ps.passing != null) attackValues.push(ps.passing);
+
+    // Defense attributes (null for GK)
+    if (ps.tackling != null) defenseValues.push(ps.tackling);
+    if (ps.marking != null) defenseValues.push(ps.marking);
+    if (ps.positioning != null) defenseValues.push(ps.positioning);
+    if (ps.heading != null) defenseValues.push(ps.heading);
+    if (ps.bravery != null) defenseValues.push(ps.bravery);
+
+    // Physical attributes (non-null for all positions)
+    physicalValues.push(ps.fitness);
+    physicalValues.push(ps.strength);
+    physicalValues.push(ps.aggression);
+    physicalValues.push(ps.speed);
+    physicalValues.push(ps.creativity);
+
+    // Goalkeeping attributes (null for outfield players)
+    if (ps.reflexes != null) gkValues.push(ps.reflexes);
+    if (ps.agility != null) gkValues.push(ps.agility);
+    if (ps.anticipation != null) gkValues.push(ps.anticipation);
+    if (ps.rushingOut != null) gkValues.push(ps.rushingOut);
+    if (ps.communication != null) gkValues.push(ps.communication);
+    if (ps.throwing != null) gkValues.push(ps.throwing);
+    if (ps.kicking != null) gkValues.push(ps.kicking);
+    if (ps.punching != null) gkValues.push(ps.punching);
+    if (ps.aerialReach != null) gkValues.push(ps.aerialReach);
+    if (ps.concentration != null) gkValues.push(ps.concentration);
+  }
 
   return {
-    players,
-    attack: average(players.map((p) => p.attack)),
-    defense: average(players.map((p) => p.defense)),
-    passing: average(players.map((p) => p.passing)),
-    goalkeeping: average(players.map((p) => p.goalkeeping)),
+    players: playerSeasons,
+    attackAvg: average(attackValues),
+    defenseAvg: average(defenseValues),
+    physicalAvg: average(physicalValues),
+    gkAvg: average(gkValues),
   };
 }
 
@@ -142,8 +198,9 @@ export async function simulateMatch(
 ): Promise<Match> {
   const p = prismaClient ?? prisma;
 
-  // 1. Load fixture
-  const fixture: Fixture = await p.fixture.findUniqueOrThrow({
+  // 1. Load fixture (with matchday to resolve seasonId)
+  // No explicit type annotation so the include narrows `fixture.matchday`.
+  const fixture = await p.fixture.findUniqueOrThrow({
     where: { id: fixtureId },
     include: { matchday: true },
   });
@@ -153,11 +210,18 @@ export async function simulateMatch(
   }
 
   const { homeClubId, awayClubId, seed } = fixture;
+  const seasonId = fixture.matchday.seasonId;
 
-  // 2. Load starting XIs
+  // 2. Load starting XIs via composite key (clubId + seasonId)
   const [homeXI, awayXI] = await Promise.all([
-    getStartingXI(homeClubId),
-    getStartingXI(awayClubId),
+    p.startingXI.findUnique({
+      where: { clubId_seasonId: { clubId: homeClubId, seasonId } },
+      select: { playerIds: true },
+    }),
+    p.startingXI.findUnique({
+      where: { clubId_seasonId: { clubId: awayClubId, seasonId } },
+      select: { playerIds: true },
+    }),
   ]);
 
   if (!homeXI || !awayXI) {
@@ -166,15 +230,32 @@ export async function simulateMatch(
     );
   }
 
-  // 3. Load all players for both clubs
-  const [homePlayers, awayPlayers] = await Promise.all([
-    p.player.findMany({ where: { clubId: homeClubId } }),
-    p.player.findMany({ where: { clubId: awayClubId } }),
+  const homePlayerIds = homeXI.playerIds as string[];
+  const awayPlayerIds = awayXI.playerIds as string[];
+
+  // 3. Load PlayerSeason rows for the starting XI members of each club.
+  //    PlayerSeason holds the 25 attributes used to compute category averages.
+  //    orderBy keeps the array order stable so pickRandom is deterministic.
+  const [homePlayerSeasons, awayPlayerSeasons] = await Promise.all([
+    p.playerSeason.findMany({
+      where: {
+        seasonId,
+        playerId: { in: homePlayerIds },
+      },
+      orderBy: { playerId: 'asc' },
+    }),
+    p.playerSeason.findMany({
+      where: {
+        seasonId,
+        playerId: { in: awayPlayerIds },
+      },
+      orderBy: { playerId: 'asc' },
+    }),
   ]);
 
-  // 4. Build team snapshots
-  const homeTeam = buildTeamSnapshot(homeXI, homePlayers);
-  const awayTeam = buildTeamSnapshot(awayXI, awayPlayers);
+  // 4. Build team snapshots from PlayerSeason rows
+  const homeTeam = buildTeamSnapshot(homePlayerSeasons);
+  const awayTeam = buildTeamSnapshot(awayPlayerSeasons);
 
   // 5. Initialize PRNG and simulation state
   const rng = createPRNG(seed);
@@ -189,7 +270,7 @@ export async function simulateMatch(
     const minute = clamp(Math.floor(rng() * 90) + 1, 1, 90);
 
     // Decide which team has the event based on attack ratings
-    const homeAttackBias = homeTeam.attack / (homeTeam.attack + awayTeam.attack);
+    const homeAttackBias = homeTeam.attackAvg / (homeTeam.attackAvg + awayTeam.attackAvg);
     const isHomeEvent = rng() < homeAttackBias;
 
     const team = isHomeEvent ? homeTeam : awayTeam;
@@ -207,12 +288,12 @@ export async function simulateMatch(
     // Roll outcome
     const outcome = rollOutcome(adjustedTemplate, rng);
 
-    // Record event
+    // Record event — PlayerSeason.playerId references the underlying Player
     events.push({
       minute,
       type: eventType.type,
       teamId,
-      playerId: player.id,
+      playerId: player.playerId,
       outcome,
     });
 
@@ -249,29 +330,36 @@ export async function simulateMatch(
 function adjustEventWeights(
   template: EventTemplate,
   team: TeamSnapshot,
-  player: Player,
+  player: PlayerSeason,
   rng: () => number
 ): EventTemplate {
   const adjustedWeights = { ...template.outcomeWeights };
 
-  // Attack-heavy events get a boost from team attack rating
+  // Attack-heavy events get a boost from team attackAvg
   if (template.type === 'shot_attempt' || template.type === 'free_kick') {
-    const attackBoost = team.attack / 100; // normalize 0-1
+    const attackBoost = team.attackAvg / 100; // normalize 0-1
     adjustedWeights.goal = Math.round(adjustedWeights.goal * (1 + attackBoost * 0.3));
     adjustedWeights.missed = Math.round(adjustedWeights.missed * (1 - attackBoost * 0.1));
   }
 
-  // Defense reduces opponent's successful tackles and passes
+  // Defense reduces opponent's successful tackles and passes.
+  // Cross-category fallback: if no player contributes defenseAvg (e.g. a GK-only
+  // XI), use physicalAvg as a generic defensive measure.
   if (template.type === 'tackle' || template.type === 'pass') {
-    const defenseFactor = team.defense / 100;
+    const defenseValue = team.defenseAvg > 0 ? team.defenseAvg : team.physicalAvg;
+    const defenseFactor = defenseValue / 100;
     adjustedWeights.successful = Math.round(
       adjustedWeights.successful * (1 - defenseFactor * 0.2)
     );
   }
 
-  // Goalkeeping reduces shot goals
+  // Goalkeeping reduces shot goals.
+  // Cross-category fallback (e.g. outfield defender vs shot): if no GK
+  // attributes are populated, fall back to physicalAvg as the defensive
+  // contribution of the outfield players contesting the shot.
   if (template.type === 'shot_attempt') {
-    const gkFactor = team.goalkeeping / 100;
+    const gkValue = team.gkAvg > 0 ? team.gkAvg : team.physicalAvg;
+    const gkFactor = gkValue / 100;
     adjustedWeights.goal = Math.round(adjustedWeights.goal * (1 - gkFactor * 0.3));
     adjustedWeights.saved = Math.round(adjustedWeights.saved * (1 + gkFactor * 0.2));
   }

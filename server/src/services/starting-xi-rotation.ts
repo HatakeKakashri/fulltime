@@ -1,4 +1,6 @@
+import { Position } from "@prisma/client";
 import { prisma } from "../db";
+import { MVP_FORMATION } from "../lib/constants/formation";
 import { getStartingXI, saveStartingXI } from "./starting-xi";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -22,9 +24,45 @@ interface PlayerPerformance {
   minutesPlayed: number;
 }
 
+interface PlayerSeasonInfo {
+  id: string;
+  name: string;
+  position: Position;
+  overallRating: number;
+}
+
 // ─── Position Group Constants ─────────────────────────────────────────────────
 
 const POSITION_GROUPS = ["GK", "DEF", "MID", "FWD"] as const;
+
+type PositionGroup = (typeof POSITION_GROUPS)[number];
+
+/**
+ * Map a Position enum value to its coarse position group used for rotation swaps.
+ * GK → "GK"; defensive positions → "DEF"; midfield positions → "MID"; ST → "FWD".
+ */
+function positionToGroup(position: Position): PositionGroup {
+  switch (position) {
+    case Position.GK:
+      return "GK";
+    case Position.DL:
+    case Position.DC:
+    case Position.DR:
+    case Position.DML:
+    case Position.DMC:
+    case Position.DMR:
+      return "DEF";
+    case Position.ML:
+    case Position.MC:
+    case Position.MR:
+    case Position.AML:
+    case Position.AMC:
+    case Position.AMR:
+      return "MID";
+    case Position.ST:
+      return "FWD";
+  }
+}
 
 // ─── Main Rotation Function ───────────────────────────────────────────────────
 
@@ -40,9 +78,9 @@ export async function evaluateAndRotateXI(
   clubId: string,
   seasonId: string
 ): Promise<RotationResult> {
-  // Get current starting XI
-  const currentXI = await getStartingXI(clubId);
-  if (!currentXI || currentXI.length !== 11) {
+  // Get current starting XI for this (clubId, seasonId)
+  const currentXI = await getStartingXI(clubId, seasonId);
+  if (!currentXI || currentXI.length !== MVP_FORMATION.totalSlots) {
     return {
       clubId,
       seasonId,
@@ -113,18 +151,29 @@ export async function evaluateAndRotateXI(
     };
   }
 
-  // Fetch all players in the club
-  const clubPlayers = await prisma.player.findMany({
-    where: { clubId },
+  // Fetch all PlayerSeason rows for this club in this season.
+  // Data source switched from Player (5 attrs) to PlayerSeason (25 attrs).
+  const clubPlayerSeasons = await prisma.playerSeason.findMany({
+    where: { clubId, seasonId },
     select: {
-      id: true,
-      name: true,
-      positionGroup: true,
+      playerId: true,
+      position: true,
       overallRating: true,
+      player: { select: { name: true } },
     },
   });
 
-  const playersById = new Map(clubPlayers.map((p) => [p.id, p]));
+  const playersById = new Map<string, PlayerSeasonInfo>(
+    clubPlayerSeasons.map((ps) => [
+      ps.playerId,
+      {
+        id: ps.playerId,
+        name: ps.player.name,
+        position: ps.position,
+        overallRating: ps.overallRating,
+      },
+    ])
+  );
 
   // Calculate average rating for each player over the lookback window
   const playerRatings = new Map<string, number[]>();
@@ -153,7 +202,7 @@ export async function evaluateAndRotateXI(
         const currentMinutes = playerMinutes.get(event.playerId) || 0;
         playerMinutes.set(event.playerId, currentMinutes + 1);
 
-        // Use player's base rating as a proxy for match performance
+        // Use PlayerSeason.overallRating as a proxy for match performance
         const player = playersById.get(event.playerId);
         if (player) {
           const ratings = playerRatings.get(event.playerId) || [];
@@ -181,7 +230,7 @@ export async function evaluateAndRotateXI(
       startingXIAverages.push({
         playerId,
         playerName: player.name,
-        positionGroup: player.positionGroup,
+        positionGroup: positionToGroup(player.position),
         avgRating,
         minutesPlayed,
       });
@@ -218,21 +267,19 @@ export async function evaluateAndRotateXI(
   }
 
   // Get bench players (not in starting XI)
-  const benchPlayers = clubPlayers.filter(
-    (p) => !currentXI.includes(p.id)
+  const benchPlayers = clubPlayerSeasons.filter(
+    (ps) => !currentXI.includes(ps.playerId)
   );
 
   // Group bench players by position group
-  const benchByGroup = new Map<string, typeof benchPlayers>();
+  const benchByGroup = new Map<PositionGroup, typeof benchPlayers>();
   for (const group of POSITION_GROUPS) {
     benchByGroup.set(group, []);
   }
 
   for (const player of benchPlayers) {
-    const group = player.positionGroup as (typeof POSITION_GROUPS)[number];
-    if (benchByGroup.has(group)) {
-      benchByGroup.get(group)!.push(player);
-    }
+    const group = positionToGroup(player.position);
+    benchByGroup.get(group)!.push(player);
   }
 
   // Attempt swaps for below-average players
@@ -240,7 +287,7 @@ export async function evaluateAndRotateXI(
   const newXI = [...currentXI];
 
   for (const belowPlayer of belowAverage) {
-    const group = belowPlayer.positionGroup as (typeof POSITION_GROUPS)[number];
+    const group = belowPlayer.positionGroup as PositionGroup;
     const availableBench = benchByGroup.get(group) || [];
 
     if (availableBench.length === 0) {
@@ -250,8 +297,8 @@ export async function evaluateAndRotateXI(
 
     // Sort bench by minutes played ascending (least played first)
     availableBench.sort((a, b) => {
-      const aMinutes = playerMinutes.get(a.id) || 0;
-      const bMinutes = playerMinutes.get(b.id) || 0;
+      const aMinutes = playerMinutes.get(a.playerId) || 0;
+      const bMinutes = playerMinutes.get(b.playerId) || 0;
       return aMinutes - bMinutes;
     });
 
@@ -260,7 +307,10 @@ export async function evaluateAndRotateXI(
     // Perform swap
     const xiIndex = newXI.indexOf(belowPlayer.playerId);
     if (xiIndex !== -1) {
-      newXI[xiIndex] = replacement.id;
+      newXI[xiIndex] = replacement.playerId;
+
+      const replacementName =
+        playersById.get(replacement.playerId)?.name ?? "";
 
       swappedPlayers.push({
         out: {
@@ -269,9 +319,9 @@ export async function evaluateAndRotateXI(
           positionGroup: belowPlayer.positionGroup,
         },
         in: {
-          playerId: replacement.id,
-          playerName: replacement.name,
-          positionGroup: replacement.positionGroup,
+          playerId: replacement.playerId,
+          playerName: replacementName,
+          positionGroup: positionToGroup(replacement.position),
         },
       });
 
@@ -282,7 +332,7 @@ export async function evaluateAndRotateXI(
 
   // Save updated starting XI if any swaps were made
   if (swappedPlayers.length > 0) {
-    await saveStartingXI(clubId, newXI);
+    await saveStartingXI(clubId, seasonId, newXI);
   }
 
   return {

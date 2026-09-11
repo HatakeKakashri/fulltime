@@ -28,40 +28,57 @@ enum MatchStatus {
   COMPLETED
 }
 
+enum Position {
+  GK
+  DL
+  DC
+  DR
+  DML
+  DMC
+  DMR
+  ML
+  MC
+  MR
+  AML
+  AMC
+  AMR
+  ST
+}
+
 model Season {
-  id          String        @id @default(uuid())
+  id          String       @id @default(uuid())
   startDate   DateTime
-  status      SeasonStatus  @default(INITIALIZED)
-  year        Int           @default(0)
-  createdAt   DateTime      @default(now())
+  status      SeasonStatus @default(INITIALIZED)
+  year        Int          @default(0)
+  createdAt   DateTime     @default(now())
   matchdays   Matchday[]
-  clubs       Club[]
+  clubSeasons ClubSeason[]
 }
 
 model Matchday {
-  id        String           @id @default(uuid())
-  seasonId  String
-  index     Int              // 1-38
-  status    MatchdayStatus   @default(PENDING)
-  season    Season           @relation(fields: [seasonId], references: [id])
-  fixtures  Fixture[]
+  id       String         @id @default(uuid())
+  seasonId String
+  index    Int // 1-38
+  status   MatchdayStatus @default(PENDING)
+  season   Season         @relation(fields: [seasonId], references: [id])
+  fixtures Fixture[]
 
   @@unique([seasonId, index])
   @@index([seasonId])
 }
 
 model Fixture {
-  id          String         @id @default(uuid())
-  matchdayId  String
-  homeClubId  String
-  awayClubId  String
-  status      FixtureStatus  @default(PENDING)
-  seed        Int            // PRNG seed for deterministic simulation
-  matchId     String?        // populated after simulation
-  matchday    Matchday       @relation(fields: [matchdayId], references: [id])
-  homeClub    Club           @relation("HomeFixtures", fields: [homeClubId], references: [id])
-  awayClub    Club           @relation("AwayFixtures", fields: [awayClubId], references: [id])
-  match       Match?
+  id         String        @id @default(uuid())
+  matchdayId String
+  homeClubId String
+  awayClubId String
+  status     FixtureStatus @default(PENDING)
+  seed       Int // PRNG seed for deterministic simulation
+  matchId    String? // populated after simulation
+  matchday   Matchday      @relation(fields: [matchdayId], references: [id])
+  homeClub   Club          @relation("HomeFixtures", fields: [homeClubId], references: [id])
+  awayClub   Club          @relation("AwayFixtures", fields: [awayClubId], references: [id])
+  match      Match?
 
   @@index([matchdayId])
   @@index([homeClubId])
@@ -69,50 +86,94 @@ model Fixture {
 }
 
 model Match {
-  id            String      @id @default(uuid())
-  fixtureId     String      @unique
-  homeScore     Int
-  awayScore     Int
-  eventLogJson  String      // JSON string of MatchEvent[]
-  status        MatchStatus @default(COMPLETED)
-  simulatedAt   DateTime    @default(now())
-  fixture       Fixture     @relation(fields: [fixtureId], references: [id])
+  id           String      @id @default(uuid())
+  fixtureId    String      @unique
+  homeScore    Int
+  awayScore    Int
+  eventLogJson String // JSON string of MatchEvent[]
+  status       MatchStatus @default(COMPLETED)
+  simulatedAt  DateTime    @default(now())
+  fixture      Fixture     @relation(fields: [fixtureId], references: [id])
 }
 
 model Club {
-  id            String          @id @default(uuid())
-  name          String
-  seasonId      String
-  season        Season          @relation(fields: [seasonId], references: [id])
-  players       Player[]
-  startingXI    StartingXI?
-  homeFixtures  Fixture[]       @relation("HomeFixtures")
-  awayFixtures  Fixture[]       @relation("AwayFixtures")
+  id           String       @id @default(uuid())
+  name         String
+  createdAt    DateTime     @default(now())
+  clubSeasons  ClubSeason[]
+  homeFixtures Fixture[]    @relation("HomeFixtures")
+  awayFixtures Fixture[]    @relation("AwayFixtures")
+}
 
+model ClubSeason {
+  clubId        String
+  seasonId      String
+  club          Club           @relation(fields: [clubId], references: [id])
+  season        Season         @relation(fields: [seasonId], references: [id])
+  playerSeasons PlayerSeason[]
+  startingXI    StartingXI?
+
+  @@id([clubId, seasonId])
   @@index([seasonId])
 }
 
 model StartingXI {
-  id          String   @id @default(uuid())
-  clubId      String   @unique
-  playerIds   Json     // Array of player UUIDs (11 players)
-  computedAt  DateTime @default(now())
-  club        Club     @relation(fields: [clubId], references: [id])
+  clubId     String
+  seasonId   String
+  playerIds  Json // Array of player UUIDs (11 players)
+  computedAt DateTime   @default(now())
+  clubSeason ClubSeason @relation(fields: [clubId, seasonId], references: [clubId, seasonId])
+
+  @@unique([clubId, seasonId])
 }
 
 model Player {
-  id                      String  @id @default(uuid())
-  clubId                  String
-  name                    String
-  positionGroup           String  // GK, DEF, MID, FWD
-  attack                  Int
-  defense                 Int
-  passing                 Int
-  physical                Int
-  goalkeeping             Int
-  overallRating           Float
-  club                    Club    @relation(fields: [clubId], references: [id])
-
-  @@index([clubId])
+  id            String         @id @default(uuid())
+  name          String
+  createdAt     DateTime       @default(now())
+  playerSeasons PlayerSeason[]
 }
 
+model PlayerSeason {
+  playerId      String
+  seasonId      String
+  clubId        String
+  position      Position
+  overallRating Float
+  // Defense attributes (null for GK)
+  tackling      Int?
+  marking       Int?
+  positioning   Int?
+  heading       Int?
+  bravery       Int?
+  // Attack attributes (null for GK)
+  passing       Int?
+  dribbling     Int?
+  crossing      Int?
+  shooting      Int?
+  finishing     Int?
+  // Physical attributes (non-null for all positions)
+  fitness       Int
+  strength      Int
+  aggression    Int
+  speed         Int
+  creativity    Int
+  // Goalkeeping attributes (null for outfield players)
+  reflexes      Int?
+  agility       Int?
+  anticipation  Int?
+  rushingOut    Int?
+  communication Int?
+  throwing      Int?
+  kicking       Int?
+  punching      Int?
+  aerialReach   Int?
+  concentration Int?
+
+  player     Player     @relation(fields: [playerId], references: [id])
+  clubSeason ClubSeason @relation(fields: [clubId, seasonId], references: [clubId, seasonId])
+
+  @@id([playerId, seasonId])
+  @@index([clubId, seasonId])
+  @@index([seasonId])
+}
